@@ -26,7 +26,7 @@
     <groupId>org.wso2.ei</groupId>
     <artifactId>wso2-micro-integrator-tooling</artifactId>
     <packaging>pom</packaging>
-    <version>1.0.0</version>
+    <version>1.0.0.1-SNAPSHOT</version>
     <name>WSO2 Micro Integrator Tooling</name>
     <url>http://wso2.com/products/enterprise-integrator/</url>
     <description>WSO2 Micro Integrator tooling</description>
@@ -98,7 +98,7 @@
         <version.antlr.runtime>4.7.1</version.antlr.runtime>
         <version.log4j.core>1.2.17</version.log4j.core>
         <maven.checkstyle.plugin.version>3.0.0</maven.checkstyle.plugin.version>
-    </properties>
+    <project.scm.id>wso2-scm-server</project.scm.id></properties>
 
     <repositories>
         <repository>
