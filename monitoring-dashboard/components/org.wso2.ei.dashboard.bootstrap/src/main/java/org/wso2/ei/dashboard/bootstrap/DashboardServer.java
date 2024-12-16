@@ -145,7 +145,6 @@ public class DashboardServer {
             System.exit(1);
         } catch (ConfigParserException e) {
             logger.error("Error while reading TOML file configs", e);
-            System.exit(1);
         }
 
         Server server = new Server();
