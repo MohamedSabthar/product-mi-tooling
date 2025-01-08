@@ -20,8 +20,6 @@ package org.wso2.dashboard.security.user.core.ldap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.dashboard.security.user.core.UserStoreManager;
-import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.core.UserCoreConstants;
 import org.wso2.micro.integrator.security.user.core.UserStoreException;
@@ -33,8 +31,6 @@ import org.wso2.micro.integrator.security.user.core.profile.ProfileConfiguration
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.List;
 
 public class ReadWriteLDAPUserStoreManager extends ReadOnlyLDAPUserStoreManager {
     private static Log log = LogFactory.getLog(ReadWriteLDAPUserStoreManager.class);
@@ -115,18 +111,15 @@ public class ReadWriteLDAPUserStoreManager extends ReadOnlyLDAPUserStoreManager 
     }
 
     protected boolean authenticate(final String userName, final Object credential, final boolean domainProvided)
-            throws DashboardUserStoreException {
+            throws PrivilegedActionException {
 
-        try {
             return AccessController.doPrivileged(new PrivilegedExceptionAction<Boolean>() {
                 @Override
                 public Boolean run() throws Exception {
                     return authenticateInternalIteration(userName, credential, domainProvided);
                 }
             });
-        } catch (PrivilegedActionException e) {
-            throw new DashboardUserStoreException("Error while authenticating user: " + e.getMessage(), e);
-        }
+
 
     }
 

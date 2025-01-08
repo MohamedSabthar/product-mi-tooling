@@ -23,12 +23,17 @@ import org.apache.axiom.om.impl.builder.StAXOMBuilder;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.dashboard.security.user.core.UserStoreConstants;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.dashboard.security.user.core.UserInfo;
 import org.wso2.dashboard.security.user.core.common.AbstractUserStoreManager;
+import org.wso2.micro.integrator.security.user.api.ClaimManager;
+import org.wso2.micro.integrator.security.user.api.Permission;
+import org.wso2.micro.integrator.security.user.api.Properties;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.core.UserStoreException;
+import org.wso2.micro.integrator.security.user.core.UserStoreManager;
+import org.wso2.micro.integrator.security.user.core.claim.Claim;
+import org.wso2.micro.integrator.security.user.core.tenant.Tenant;
 import org.wso2.securevault.SecretResolver;
 import org.wso2.securevault.SecretResolverFactory;
 import org.wso2.securevault.commons.MiscellaneousUtil;
@@ -39,13 +44,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.security.AccessController;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
 import java.util.*;
 
 public class FileBasedUserStoreManager extends AbstractUserStoreManager {
-    private static Log log = LogFactory.getLog(FileBasedUserStoreManager.class);
+    private static final Log log = LogFactory.getLog(FileBasedUserStoreManager.class);
     private static final FileBasedUserStoreManager userStoreManager = new FileBasedUserStoreManager();
     private static final String USER_MGT_CONFIG_FILE = "user-mgt.xml";
     private static final String REALM = "Realm";
@@ -81,9 +83,9 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
         }
 
         secretResolver = SecretResolverFactory.create(documentElement, true);
-        OMElement realmElement = (OMElement) documentElement.getFirstChildWithName(new QName(REALM));
+        OMElement realmElement = documentElement.getFirstChildWithName(new QName(REALM));
         if (Objects.nonNull(realmElement)) {
-            OMElement fileUserStore = (OMElement) realmElement.getFirstChildWithName(new QName(FILE_USER_STORE));
+            OMElement fileUserStore = realmElement.getFirstChildWithName(new QName(FILE_USER_STORE));
             if (Objects.nonNull(fileUserStore)) {
                 userMap = populateUsers(fileUserStore.getFirstChildWithName(new QName(USERS)));
             } else {
@@ -144,11 +146,71 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
+    protected String[] doListUsers(String filter, int maxItemLimit) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
     public boolean authenticate(final String userName, final Object credential) {
         if (userName == null || credential == null) {
             return false;
         }
         return doAuthenticate(userName, credential);
+    }
+
+    @Override
+    public boolean isExistingUser(String s) throws UserStoreException {
+        return false;
+    }
+
+    @Override
+    public boolean isExistingRole(String s, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return false;
+    }
+
+    @Override
+    public boolean isExistingRole(String s) throws UserStoreException {
+        return false;
+    }
+
+    @Override
+    public String[] getRoleNames() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getRoleNames(boolean b) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getProfileNames(String s) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getUserListOfRole(String s) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String getUserClaimValue(String s, String s1, String s2) throws UserStoreException {
+        return "";
+    }
+
+    @Override
+    public Map<String, String> getUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
+        return Map.of();
+    }
+
+    @Override
+    public Claim[] getUserClaimValues(String s, String s1) throws UserStoreException {
+        return new Claim[0];
+    }
+
+    @Override
+    public String[] getAllProfileNames() throws UserStoreException {
+        return new String[0];
     }
 
     public boolean isAdmin(String username) throws UserStoreException {
@@ -172,13 +234,184 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public boolean isReadOnly() throws DashboardUserStoreException {
+    public boolean isReadOnly() {
         return false;
     }
 
     @Override
-    public int getTenantId() throws DashboardUserStoreException {
+    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1, boolean b) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateCredential(String s, Object o, Object o1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateCredentialByAdmin(String s, Object o) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUser(String s) throws UserStoreException {
+
+    }
+
+    @Override
+    public void addRole(String s, String[] strings, Permission[] permissions, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+
+    }
+
+    @Override
+    public void addRole(String s, String[] strings, Permission[] permissions) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+
+    }
+
+    @Override
+    public void deleteRole(String s) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateUserListOfRole(String s, String[] strings, String[] strings1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateRoleListOfUser(String s, String[] strings, String[] strings1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void setUserClaimValue(String s, String s1, String s2, String s3) throws UserStoreException {
+
+    }
+
+    @Override
+    public void setUserClaimValues(String s, Map<String, String> map, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUserClaimValue(String s, String s1, String s2) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public String[] getHybridRoles() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getAllSecondaryRoles() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public Date getPasswordExpirationTime(String s) throws UserStoreException {
+        return null;
+    }
+
+    @Override
+    public int getUserId(String s) throws UserStoreException {
         return 0;
+    }
+
+    @Override
+    public int getTenantId(String s) throws UserStoreException {
+        return 0;
+    }
+
+    @Override
+    public int getTenantId() {
+        return 0;
+    }
+
+
+    @Override
+    public Map<String, String> getProperties(Tenant tenant) throws UserStoreException {
+        return Map.of();
+    }
+
+    @Override
+    public void updateRoleName(String s, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public boolean isMultipleProfilesAllowed() {
+        return false;
+    }
+
+    @Override
+    public Properties getDefaultUserStoreProperties() {
+        return null;
+    }
+
+    @Override
+    public boolean isBulkImportSupported() throws UserStoreException {
+        return false;
+    }
+
+    @Override
+    public String[] getUserList(String s, String s1, String s2) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public UserStoreManager getSecondaryUserStoreManager() {
+        return null;
+    }
+
+    @Override
+    public void setSecondaryUserStoreManager(UserStoreManager userStoreManager) {
+
+    }
+
+    @Override
+    public UserStoreManager getSecondaryUserStoreManager(String s) {
+        return null;
+    }
+
+    @Override
+    public void addSecondaryUserStoreManager(String s, UserStoreManager userStoreManager) {
+
+    }
+
+    @Override
+    public void addRememberMe(String s, String s1) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+
+    }
+
+    @Override
+    public boolean isValidRememberMeToken(String s, String s1) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return false;
+    }
+
+    @Override
+    public ClaimManager getClaimManager() throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return null;
+    }
+
+    @Override
+    public boolean isSCIMEnabled() throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return false;
+    }
+
+    @Override
+    public Map<String, String> getProperties(org.wso2.micro.integrator.security.user.api.Tenant tenant) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return Map.of();
     }
 
     @Override

@@ -27,35 +27,54 @@ import org.wso2.dashboard.security.user.core.common.AbstractUserStoreManager;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.dashboard.security.user.core.common.Secret;
 import org.wso2.dashboard.security.user.core.common.UnsupportedSecretTypeException;
+import org.wso2.micro.integrator.security.user.api.Permission;
+import org.wso2.micro.integrator.security.user.api.Properties;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.core.UserCoreConstants;
 import org.wso2.micro.integrator.security.user.core.UserRealm;
 import org.wso2.micro.integrator.security.user.core.UserStoreException;
+import org.wso2.micro.integrator.security.user.core.claim.Claim;
 import org.wso2.micro.integrator.security.user.core.claim.ClaimManager;
-import org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants;
-import org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants;
-import org.wso2.micro.integrator.security.user.core.profile.ProfileConfigurationManager;
+import org.wso2.micro.integrator.security.user.core.tenant.Tenant;
 import org.wso2.micro.integrator.security.user.core.util.JDBCRealmUtil;
+import org.wso2.micro.integrator.security.user.core.UserStoreManager;
 
 import javax.sql.DataSource;
-import java.security.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.sql.Timestamp;
-import java.sql.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
-import java.util.*;
+import java.util.GregorianCalendar;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 
-public class JDBCUserStoreManager extends AbstractUserStoreManager implements UserStoreManager {
-    private static Log log = LogFactory.getLog(JDBCUserStoreManager.class);
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.READ_GROUPS_ENABLED;
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.WRITE_GROUPS_ENABLED;
+import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.*;
+import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.SELECT_USER;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.*;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.SELECT_USER_CASE_INSENSITIVE;
+
+public class JDBCUserStoreManager extends AbstractUserStoreManager {
+    private static final Log log = LogFactory.getLog(JDBCUserStoreManager.class);
     private static final String CASE_INSENSITIVE_USERNAME = "CaseInsensitiveUsername";
     protected DataSource jdbcds = null;
 
     public JDBCUserStoreManager() {
-
     }
 
     public JDBCUserStoreManager(RealmConfiguration realmConfig, Map<String, Object> properties,
-                                 ClaimManager claimManager, ProfileConfigurationManager profileManager, UserRealm realm,
-                                 Integer tenantId, boolean skipInitData) throws DashboardUserStoreException {
+                                ClaimManager claimManager, UserRealm realm, Integer tenantId)
+            throws DashboardUserStoreException {
         this(realmConfig, tenantId);
         if (log.isDebugEnabled()) {
             log.debug("Started " + System.currentTimeMillis());
@@ -64,12 +83,11 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
         this.userRealm = realm;
 
         try {
-            jdbcds = loadUserStoreSpacificDataSoruce();
+            jdbcds = loadUserStoreSpecificDataSource();
             properties.put(UserStoreConstants.DATA_SOURCE, jdbcds);
 
             if (log.isDebugEnabled()) {
-                log.debug("The jdbcDataSource being used by JDBCUserStoreManager :: "
-                        + jdbcds.hashCode());
+                log.debug("The jdbcDataSource being used by JDBCUserStoreManager :: " + jdbcds.hashCode());
             }
         } catch (Exception e) {
             if (log.isDebugEnabled()) {
@@ -93,71 +111,36 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
         }
     }
 
-    public JDBCUserStoreManager(RealmConfiguration realmConfig, int tenantId) throws DashboardUserStoreException {
+    public JDBCUserStoreManager(RealmConfiguration realmConfig, int tenantId) {
         this.realmConfig = realmConfig;
         this.tenantId = tenantId;
-        realmConfig.setUserStoreProperties(JDBCRealmUtil.getSQL(realmConfig
-                .getUserStoreProperties()));
-
-        if (realmConfig.getUserStoreProperty(UserStoreConstants.RealmConfig.READ_GROUPS_ENABLED) != null) {
-            readGroupsEnabled = Boolean.parseBoolean(realmConfig
-                    .getUserStoreProperty(UserStoreConstants.RealmConfig.READ_GROUPS_ENABLED));
+        realmConfig.setUserStoreProperties(JDBCRealmUtil.getSQL(realmConfig.getUserStoreProperties()));
+        if (realmConfig.getUserStoreProperty(READ_GROUPS_ENABLED) != null) {
+            readGroupsEnabled = Boolean.parseBoolean(realmConfig.getUserStoreProperty(READ_GROUPS_ENABLED));
         }
 
         if (log.isDebugEnabled()) {
-            if (readGroupsEnabled) {
-                log.debug("ReadGroups is enabled for " + getMyDomainName());
-            } else {
-                log.debug("ReadGroups is disabled for " + getMyDomainName());
-            }
+            String status = readGroupsEnabled ? "enabled" : "disabled";
+            log.debug("ReadGroups is" + status + " for" + getMyDomainName());
         }
 
-        if (realmConfig.getUserStoreProperty(UserStoreConstants.RealmConfig.WRITE_GROUPS_ENABLED) != null) {
-            writeGroupsEnabled = Boolean.parseBoolean(realmConfig
-                    .getUserStoreProperty(UserStoreConstants.RealmConfig.WRITE_GROUPS_ENABLED));
-        } else {
-            if (!isReadOnly()) {
-                writeGroupsEnabled = true;
-            }
+        if (realmConfig.getUserStoreProperty(WRITE_GROUPS_ENABLED) != null) {
+            writeGroupsEnabled = Boolean.parseBoolean(realmConfig.getUserStoreProperty(WRITE_GROUPS_ENABLED));
+        } else if (!isReadOnly()) {
+            writeGroupsEnabled = true;
         }
 
         if (log.isDebugEnabled()) {
-            if (writeGroupsEnabled) {
-                log.debug("WriteGroups is enabled for " + getMyDomainName());
-            } else {
-                log.debug("WriteGroups is disabled for " + getMyDomainName());
-            }
+            String status = writeGroupsEnabled ? "enabled" : "disabled";
+            log.debug("WriteGroups is" + status + " for" + getMyDomainName());
         }
         if (writeGroupsEnabled) {
             readGroupsEnabled = true;
         }
     }
 
-    /**
-     * @return
-     * @throws UserStoreException
-     */
-    private DataSource loadUserStoreSpacificDataSoruce() {
+    private DataSource loadUserStoreSpecificDataSource() {
         return DatabaseUtil.createUserStoreDataSource(realmConfig);
-    }
-
-    public boolean doAuthenticate(String userName, String credential) throws UserStoreException {
-        try {
-
-            return AccessController.doPrivileged(new PrivilegedExceptionAction<Boolean>() {
-                @Override
-                public Boolean run() throws Exception {
-                    if (!UserStoreManagerUtils.validateUserNameAndCredential(userName, credential)) {
-                        return  false;
-                    }
-                    int index = userName.indexOf("/");
-                    boolean domainProvided = index > 0;
-                    return doConnectAndAuthenticate(userName, credential);
-                }
-            });
-        } catch (PrivilegedActionException e) {
-            throw new UserStoreException("Error occurred while authenticating user", e);
-        }
     }
 
     @Override
@@ -184,37 +167,29 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
         Connection dbConnection = null;
         ResultSet rs = null;
         PreparedStatement prepStmt = null;
-        String sqlstmt = null;
-        String password = null;
         boolean isAuthed = false;
-
         try {
             dbConnection = getDBConnection();
             dbConnection.setAutoCommit(false);
-
-            if (isCaseSensitiveUsername()) {
-                sqlstmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.SELECT_USER);
-            } else {
-                sqlstmt = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.SELECT_USER_CASE_INSENSITIVE);
-            }
+            String sqlStatement = realmConfig.getUserStoreProperty(isCaseSensitiveUsername()
+                    ? SELECT_USER : SELECT_USER_CASE_INSENSITIVE);
 
             if (log.isDebugEnabled()) {
-                log.debug(sqlstmt);
+                log.debug(sqlStatement);
             }
 
-            prepStmt = dbConnection.prepareStatement(sqlstmt);
+            prepStmt = dbConnection.prepareStatement(sqlStatement);
             prepStmt.setString(1, userName);
-            if (sqlstmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+            if (sqlStatement.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
                 prepStmt.setInt(2, tenantId);
             }
 
             rs = prepStmt.executeQuery();
-
-            if (rs.next() == true) {
+            if (rs.next()) {
                 String storedPassword = rs.getString(3);
                 String saltValue = null;
                 if ("true".equalsIgnoreCase(realmConfig
-                        .getUserStoreProperty(JDBCRealmConstants.STORE_SALTED_PASSWORDS))) {
+                        .getUserStoreProperty(STORE_SALTED_PASSWORDS))) {
                     saltValue = rs.getString(4);
                 }
 
@@ -224,11 +199,8 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
                 GregorianCalendar gc = new GregorianCalendar();
                 gc.add(GregorianCalendar.HOUR, -24);
                 Date date = gc.getTime();
-
-                if (requireChange == true && changedTime.before(date)) {
-                    isAuthed = false;
-                } else {
-                    password = this.preparePassword(credential, saltValue);
+                if (!requireChange || !changedTime.before(date)) {
+                    String password = this.preparePassword(credential, saltValue);
                     if ((storedPassword != null) && (storedPassword.equals(password))) {
                         isAuthed = true;
                     }
@@ -247,90 +219,122 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
         if (log.isDebugEnabled()) {
             log.debug("User " + userName + " login attempt. Login success :: " + isAuthed);
         }
-
         return isAuthed;
     }
 
-    private void checkMandatoryParams(String userName, Object credential) {
-    }
-
-    public boolean doConnectAndAuthenticate(String userName, Object credential) throws DashboardUserStoreException {
+    public String[] doListUsers(String filter, int maxItemLimit) throws UserStoreException {
+        String[] users = new String[0];
         Connection dbConnection = null;
-        ResultSet rs = null;
         PreparedStatement prepStmt = null;
-        String sqlstmt = null;
-        String password = null;
-        boolean isAuthed = false;
+        ResultSet rs = null;
+
+        if (maxItemLimit == 0) {
+            return new String[0];
+        }
+
+        int givenMax;
+        int searchTime;
 
         try {
-            dbConnection = getDBConnection();
-            dbConnection.setAutoCommit(false);
+            givenMax = Integer.parseInt(realmConfig
+                    .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_MAX_USER_LIST));
+        } catch (Exception e) {
+            givenMax = UserCoreConstants.MAX_USER_ROLE_LIST;
+        }
 
-            if (isCaseSensitiveUsername()) {
-                sqlstmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.SELECT_USER);
+        try {
+            searchTime = Integer.parseInt(realmConfig
+                    .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_MAX_SEARCH_TIME));
+        } catch (Exception e) {
+            searchTime = UserCoreConstants.MAX_SEARCH_TIME;
+        }
+
+        if (maxItemLimit < 0 || maxItemLimit > givenMax) {
+            maxItemLimit = givenMax;
+        }
+
+        try {
+
+            if (filter != null && !filter.trim().isEmpty()) {
+                filter = filter.trim();
+                filter = filter.replace("*", "%");
+                filter = filter.replace("?", "_");
             } else {
-                sqlstmt = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.SELECT_USER_CASE_INSENSITIVE);
+                filter = "%";
             }
 
-            if (log.isDebugEnabled()) {
-                log.debug(sqlstmt);
+            List<String> lst = new LinkedList<>();
+
+            dbConnection = getDBConnection();
+
+            if (dbConnection == null) {
+                throw new UserStoreException("null connection");
             }
 
-            prepStmt = dbConnection.prepareStatement(sqlstmt);
-            prepStmt.setString(1, userName);
-            if (sqlstmt.contains(UserStoreConstants.UM_TENANT_COLUMN)) {
+            String sqlStmt = realmConfig.getUserStoreProperty(isCaseSensitiveUsername() ?
+                    GET_USER_FILTER : GET_USER_FILTER_CASE_INSENSITIVE);
+
+
+            prepStmt = dbConnection.prepareStatement(sqlStmt);
+            prepStmt.setString(1, filter);
+            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
                 prepStmt.setInt(2, tenantId);
             }
-
-            rs = prepStmt.executeQuery();
-
-            if (rs.next() == true) {
-                String storedPassword = rs.getString(3);
-                String saltValue = null;
-                if ("true".equalsIgnoreCase(realmConfig
-                        .getUserStoreProperty(JDBCRealmConstants.STORE_SALTED_PASSWORDS))) {
-                    saltValue = rs.getString(4);
-                }
-
-                boolean requireChange = rs.getBoolean(5);
-                Timestamp changedTime = rs.getTimestamp(6);
-
-                GregorianCalendar gc = new GregorianCalendar();
-                gc.add(GregorianCalendar.HOUR, -24);
-                Date date = gc.getTime();
-
-                if (requireChange == true && changedTime.before(date)) {
-                    isAuthed = false;
-                } else {
-                    password = preparePassword(credential.toString(), saltValue);
-                    if ((storedPassword != null) && (storedPassword.equals(password))) {
-                        isAuthed = true;
-                    }
-                }
+            prepStmt.setMaxRows(maxItemLimit);
+            try {
+                prepStmt.setQueryTimeout(searchTime);
+            } catch (Exception e) {
+                // this can be ignored since timeout method is not implemented
+                log.debug(e);
             }
+
+            try {
+                rs = prepStmt.executeQuery();
+            } catch (SQLException e) {
+                if (e instanceof SQLTimeoutException) {
+                    log.error("The cause might be a time out. Hence ignored", e);
+                    return users;
+                }
+                String errorMessage =
+                        "Error while fetching users according to filter : " + filter + " & max Item limit " +
+                                ": " + maxItemLimit;
+                if (log.isDebugEnabled()) {
+                    log.debug(errorMessage, e);
+                }
+                throw new UserStoreException(errorMessage, e);
+            }
+
+            while (rs.next()) {
+
+                String name = rs.getString(1);
+                if (UserCoreConstants.REGISTRY_ANONNYMOUS_USERNAME.equals(name)) {
+                    continue;
+                }
+                lst.add(name);
+            }
+            rs.close();
+
+            if (!lst.isEmpty()) {
+                users = lst.toArray(new String[0]);
+            }
+
+            Arrays.sort(users);
+
         } catch (SQLException e) {
-            String msg = "Error occurred while retrieving user authentication info for user : " + userName;
+            String msg = "Error occurred while retrieving users for filter : " + filter + " & max Item limit : " +
+                    maxItemLimit;
             if (log.isDebugEnabled()) {
                 log.debug(msg, e);
             }
-            throw new DashboardUserStoreException("Authentication Failure", e);
+            throw new UserStoreException(msg, e);
         } finally {
             DatabaseUtil.closeAllConnections(dbConnection, rs, prepStmt);
-        }
 
-        if (log.isDebugEnabled()) {
-            log.debug("User " + userName + " login attempt. Login success :: " + isAuthed);
         }
+        return users;
 
-        return isAuthed;
     }
 
-    /**
-     * @param sqlStmt
-     * @param params
-     * @return
-     * @throws UserStoreException
-     */
     private String[] getStringValuesFromDatabase(String sqlStmt, Object... params)
             throws DashboardUserStoreException {
 
@@ -342,7 +346,7 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
             }
         }
 
-        String[] values = new String[0];
+        String[] values;
         Connection dbConnection = null;
         PreparedStatement prepStmt = null;
         ResultSet rs = null;
@@ -397,7 +401,7 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
                 credentialObj.addChars(saltValue.toCharArray());
             }
 
-            String digestFunction = realmConfig.getUserStoreProperties().get(JDBCRealmConstants.DIGEST_FUNCTION);
+            String digestFunction = realmConfig.getUserStoreProperties().get(DIGEST_FUNCTION);
             if (digestFunction != null) {
                 if (digestFunction.equals(UserCoreConstants.RealmConfig.PASSWORD_HASH_METHOD_PLAIN_TEXT)) {
                     passwordString = new String(credentialObj.getChars());
@@ -439,20 +443,157 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
 
     private DataSource getJDBCDataSource() {
         if (jdbcds == null) {
-            jdbcds = loadUserStoreSpacificDataSoruce();
+            jdbcds = loadUserStoreSpecificDataSource();
         }
         return jdbcds;
     }
 
     @Override
-    public boolean isReadOnly() throws DashboardUserStoreException {
+    public boolean isExistingUser(String s) throws UserStoreException {
         return false;
     }
 
-    /**
-     *
-     */
-    public int getTenantId() throws DashboardUserStoreException {
+    @Override
+    public boolean isExistingRole(String s, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return false;
+    }
+
+    @Override
+    public boolean isExistingRole(String s) throws UserStoreException {
+        return false;
+    }
+
+    @Override
+    public String[] getRoleNames() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getRoleNames(boolean b) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getProfileNames(String s) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getUserListOfRole(String s) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String getUserClaimValue(String s, String s1, String s2) throws UserStoreException {
+        return "";
+    }
+
+    @Override
+    public Map<String, String> getUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
+        return Map.of();
+    }
+
+    @Override
+    public Claim[] getUserClaimValues(String s, String s1) throws UserStoreException {
+        return new Claim[0];
+    }
+
+    @Override
+    public String[] getAllProfileNames() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public boolean isReadOnly() {
+        return false;
+    }
+
+    @Override
+    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1, boolean b) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateCredential(String s, Object o, Object o1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateCredentialByAdmin(String s, Object o) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUser(String s) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteRole(String s) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateUserListOfRole(String s, String[] strings, String[] strings1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateRoleListOfUser(String s, String[] strings, String[] strings1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void setUserClaimValue(String s, String s1, String s2, String s3) throws UserStoreException {
+
+    }
+
+    @Override
+    public void setUserClaimValues(String s, Map<String, String> map, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUserClaimValue(String s, String s1, String s2) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public String[] getHybridRoles() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getAllSecondaryRoles() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public Date getPasswordExpirationTime(String s) throws UserStoreException {
+        return null;
+    }
+
+    @Override
+    public int getUserId(String s) throws UserStoreException {
+        return 0;
+    }
+
+    @Override
+    public int getTenantId(String s) throws UserStoreException {
+        return 0;
+    }
+
+    public int getTenantId() {
         return this.tenantId;
     }
 
@@ -470,8 +611,8 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
         String[] names;
         if (filter.equals("*") || StringUtils.isEmpty(filter)) {
             sqlStmt = getExternalRoleListSqlStatement(
-                    realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_USER_ROLE),
-                    realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.GET_USER_ROLE_CASE_INSENSITIVE));
+                    realmConfig.getUserStoreProperty(GET_USER_ROLE),
+                    realmConfig.getUserStoreProperty(GET_USER_ROLE_CASE_INSENSITIVE));
             if (sqlStmt.contains(UserStoreConstants.UM_TENANT_COLUMN)) {
                 names = getStringValuesFromDatabase(sqlStmt, userName, tenantId, tenantId, tenantId);
             } else {
@@ -482,9 +623,9 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
             filter = filter.replace("*", "%");
             filter = filter.replace("?", "_");
             sqlStmt = getExternalRoleListSqlStatement(
-                    realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_IS_USER_ROLE_EXIST), realmConfig
+                    realmConfig.getUserStoreProperty(GET_IS_USER_ROLE_EXIST), realmConfig
                             .getUserStoreProperty(
-                                    JDBCCaseInsensitiveConstants.GET_IS_USER_ROLE_EXIST_CASE_INSENSITIVE));
+                                    GET_IS_USER_ROLE_EXIST_CASE_INSENSITIVE));
 
             if (sqlStmt.contains(UserStoreConstants.UM_TENANT_COLUMN)) {
                 names = getStringValuesFromDatabase(sqlStmt, userName, tenantId, tenantId, tenantId, filter);
@@ -504,12 +645,99 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager implements Us
         }
 
         Collections.addAll(roles, names);
-        return roles.toArray(new String[roles.size()]);
+        return roles.toArray(new String[0]);
     }
 
     @Override
     protected String[] doGetSharedRoleListOfUser(String s, String s1, String s2) {
         return new String[0];
+    }
+
+    @Override
+    public Map<String, String> getProperties(Tenant tenant) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void updateRoleName(String s, String s1) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isMultipleProfilesAllowed() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Properties getDefaultUserStoreProperties() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isBulkImportSupported() throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String[] getUserList(String s, String s1, String s2) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public UserStoreManager getSecondaryUserStoreManager() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setSecondaryUserStoreManager(UserStoreManager userStoreManager) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public UserStoreManager getSecondaryUserStoreManager(String s) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void addSecondaryUserStoreManager(String s, UserStoreManager userStoreManager) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void addRememberMe(String s, String s1) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isValidRememberMeToken(String s, String s1) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public org.wso2.micro.integrator.security.user.api.ClaimManager getClaimManager() throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isSCIMEnabled() throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+
+    @Override
+    public void addRole(String s, String[] strings, Permission[] permissions, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        throw new UnsupportedOperationException();
+
+    }
+
+    @Override
+    public void addRole(String s, String[] strings, Permission[] permissions) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Map<String, String> getProperties(org.wso2.micro.integrator.security.user.api.Tenant tenant) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        throw new UnsupportedOperationException();
     }
 }
 

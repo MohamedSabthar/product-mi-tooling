@@ -29,6 +29,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
 
+import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
+import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
@@ -45,6 +47,8 @@ import org.wso2.ei.dashboard.core.rest.model.UsersInner;
 import org.wso2.ei.dashboard.core.rest.model.UsersResourceResponse;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
+import org.wso2.micro.integrator.security.user.api.UserStoreException;
+import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -52,6 +56,8 @@ import java.net.URLEncoder;
 
 import java.util.Arrays;
 import java.util.Collections;
+
+import static org.wso2.ei.dashboard.core.commons.Constants.ROLES;
 
 
 /**
@@ -66,24 +72,35 @@ public class UsersDelegate {
 
 
     public UsersResourceResponse fetchPaginatedUsers(String groupId, String searchKey,
-        String lowerLimit, String upperLimit, String order, String orderBy, String isUpdate)
-        throws ManagementApiException {
+                                                     String lowerLimit, String upperLimit, String order, String orderBy, String isUpdate)
+            throws ManagementApiException {
         String resourceType = Constants.USERS;
-        DelegatesUtil.logDebugLogs(resourceType, groupId, lowerLimit, upperLimit, order, orderBy, isUpdate);
+//        DelegatesUtil.logDebugLogs(resourceType, groupId, lowerLimit, upperLimit, order, orderBy, isUpdate);
         int fromIndex = Integer.parseInt(lowerLimit);
         int toIndex = Integer.parseInt(upperLimit);
-        boolean isUpdatedContent = Boolean.parseBoolean(isUpdate);
-        String prevResourceType = DelegatesUtil.getPrevResourceType();
+//        boolean isUpdatedContent = Boolean.parseBoolean(isUpdate);
+//        String prevResourceType = DelegatesUtil.getPrevResourceType();
 
         log.debug("prevSearch key :" + prevSearchKey + ", currentSearch key:" + searchKey);
 
-        if (isUpdatedContent || prevSearchKey == null || !(prevSearchKey.equals(searchKey))
-                || !(prevResourceType.equals(resourceType))) {
-            allUserIds = getSearchedUsers(groupId, searchKey);
-            Arrays.sort(allUserIds);
-            count = allUserIds.length;
+//        if (isUpdatedContent || prevSearchKey == null || !(prevSearchKey.equals(searchKey))
+//                || !(prevResourceType.equals(resourceType))) {
+//            allUserIds = getSearchedUsers(groupId, searchKey);
+        try {
+            allUserIds = getSearchedUsersFromICP();
+        } catch (UserStoreException | DashboardUserStoreException e) {
+            throw new ManagementApiException(e.getMessage(), 500);
         }
-        Users paginatedUsers = getPaginatedUsersResultsFromMI(allUserIds, fromIndex, toIndex, groupId, order, orderBy);
+        Arrays.sort(allUserIds);
+        count = allUserIds.length;
+//        }
+//        Users paginatedUsers = getPaginatedUsersResultsFromMI(allUserIds, fromIndex, toIndex, groupId, order, orderBy);
+        Users paginatedUsers = null;
+        try {
+            paginatedUsers = getPaginatedUsersResultsFromICP(allUserIds, fromIndex, toIndex, groupId, order, orderBy);
+        } catch (UserStoreException | DashboardUserStoreException e) {
+            throw new ManagementApiException(e.getMessage(), 500);
+        }
         UsersResourceResponse usersResourceResponse = new UsersResourceResponse();
         usersResourceResponse.setResourceList(paginatedUsers);
         usersResourceResponse.setCount(count);
@@ -214,6 +231,56 @@ public class UsersDelegate {
                 mgtApiUrl, accessToken, searchKey);
         return new Gson().fromJson(usersList, User[].class);
     }
+
+    private static User[] getSearchedUsersFromICP() throws ManagementApiException, UserStoreException, DashboardUserStoreException {
+        UserStoreManager ustr = UserStoreManagerUtils.getUserStoreManager();
+        String[] usrs = ustr.listUsers(null, 10); // TODO: change filter and limit
+        return Arrays.stream(usrs).map(User::new).toArray(User[]::new);
+    }
+
+    private Users getPaginatedUsersResultsFromICP(User[] users, int lowerLimit, int upperLimit, String groupId,
+                                                  String order, String orderBy) throws ManagementApiException, UserStoreException, DashboardUserStoreException {
+
+        Users resultList = new Users();
+        try {
+            if (users.length < upperLimit) {
+                upperLimit = users.length;
+            }
+            if (upperLimit < lowerLimit) {
+                lowerLimit = upperLimit;
+            }
+            users = Arrays.copyOfRange(users, lowerLimit, upperLimit);
+
+            // creating the URL and fetch role info of user in the current page
+//            fetchUserInfo(users, groupId, resultList);
+            for (User user : users) {
+                String[] roles = UserStoreManagerUtils.getUserStoreManager().getRoleListOfUser(user.getUserId());
+                UsersInner usersInner = new UsersInner();
+                usersInner.userId(user.getUserId());
+                JsonObject obj = new JsonObject();
+                obj.addProperty("userId", user.getUserId());
+                obj.addProperty("isAdmin", UserStoreManagerUtils.isAdmin(user.getUserId()));
+                JsonArray list = new JsonArray();
+                Arrays.stream(roles).forEach(list::add);
+                obj.add(ROLES, list);
+                usersInner.setDetails(obj.toString());
+                resultList.add(usersInner);
+            }
+            Collections.sort(resultList);
+
+            if ("desc".equalsIgnoreCase(order)) {
+                Collections.reverse(resultList);
+            }
+            return resultList;
+
+        } catch (IndexOutOfBoundsException e) {
+            log.error("Index values are out of bound", e);
+        } catch (IllegalArgumentException e) {
+            log.error("Illegal arguments for index values", e);
+        }
+        return null;
+    }
+
 
     private Users getPaginatedUsersResultsFromMI(User[] users, int lowerLimit, int upperLimit, String groupId,
                                                  String order, String orderBy) throws ManagementApiException {
