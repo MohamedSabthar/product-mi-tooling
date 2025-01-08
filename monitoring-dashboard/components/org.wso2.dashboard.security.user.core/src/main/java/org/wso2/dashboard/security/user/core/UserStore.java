@@ -18,6 +18,8 @@
 
 package org.wso2.dashboard.security.user.core;
 
+import org.wso2.micro.integrator.security.user.api.UserStoreManager;
+
 public class UserStore {
 
     private UserStoreManager userStoreManager;

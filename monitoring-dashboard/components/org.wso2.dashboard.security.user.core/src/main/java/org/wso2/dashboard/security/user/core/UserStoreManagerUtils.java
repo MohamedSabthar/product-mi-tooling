@@ -18,8 +18,6 @@
 
 package org.wso2.dashboard.security.user.core;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.dashboard.security.user.core.common.DataHolder;
 import org.wso2.dashboard.security.user.core.file.FileBasedUserStoreManager;
@@ -28,27 +26,21 @@ import org.wso2.dashboard.security.user.core.ldap.ReadOnlyLDAPUserStoreManager;
 import org.wso2.micro.integrator.security.MicroIntegratorSecurityUtils;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.api.UserStoreException;
-import org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants;
+import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Hashtable;
+import java.util.List;
+
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.DEFAULT_JDBC_USERSTORE_MANAGER;
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.DEFAULT_LDAP_USERSTORE_MANAGER;
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.DOMAIN_SEPARATOR;
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME;
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME;
+import static org.wso2.dashboard.security.user.core.UserStoreConstants.SUPER_TENANT_ID;
 
 public class UserStoreManagerUtils {
-    private static Log log = LogFactory.getLog(UserStoreManagerUtils.class);
-    private static final String MULIPLE_ATTRIBUTE_ENABLE = "MultipleAttributeEnable";
-
-    public static boolean validateUserNameAndCredential(String userName, String credential) {
-        boolean isValid = true;
-        if (userName == null || credential == null) {
-            String message =
-                    String.format(UserCoreErrorConstants.ErrorMessages.
-                            ERROR_CODE_ERROR_WHILE_PRE_AUTHENTICATION.getMessage(),
-                            "Authentication failure. Either Username or Password is null");
-            log.error(message);
-            isValid = false;
-        }
-
-        return isValid;
-    }
 
     public static UserStoreManager getUserStoreManager() throws UserStoreException, DashboardUserStoreException {
         DataHolder dataHolder = DataHolder.getInstance();
@@ -62,30 +54,33 @@ public class UserStoreManagerUtils {
         DataHolder dataHolder = DataHolder.getInstance();
         if (isFileBasedUserStoreEnabled()) {
             dataHolder.setUserStoreManager(FileBasedUserStoreManager.getUserStoreManager());
-        } else {
-            RealmConfiguration config = RealmConfigXMLProcessor.createRealmConfig();
-            if (config == null) {
-                throw new UserStoreException("Unable to create Realm Configuration");
-            }
-            dataHolder.setRealmConfig(config);
-
-            UserStoreManager userStoreManager;
-            String userStoreMgtClassStr = config.getUserStoreClass();
-            switch (userStoreMgtClassStr) {
-                case UserStoreConstants.DEFAULT_LDAP_USERSTORE_MANAGER:
-                    userStoreManager = new ReadOnlyLDAPUserStoreManager(config, null, null);
-                    break;
-                case UserStoreConstants.DEFAULT_JDBC_USERSTORE_MANAGER:
-                    userStoreManager = new JDBCUserStoreManager(config, new Hashtable<>(), null, null, null,
-                            UserStoreConstants.SUPER_TENANT_ID, false);
-                    break;
-                default:
-                    userStoreManager = (UserStoreManager) MicroIntegratorSecurityUtils.
-                            createObjectWithOptions(userStoreMgtClassStr, config);
-                    break;
-            }
-            dataHolder.setUserStoreManager(userStoreManager);
+            return;
         }
+        RealmConfiguration config = RealmConfigXMLProcessor.createRealmConfig();
+        if (config == null) {
+            throw new UserStoreException("Unable to create Realm Configuration");
+        }
+        dataHolder.setRealmConfig(config);
+
+        UserStoreManager userStoreManager;
+        String userStoreMgtClassStr = config.getUserStoreClass();
+        switch (userStoreMgtClassStr) {
+            case DEFAULT_LDAP_USERSTORE_MANAGER: {
+                userStoreManager = new ReadOnlyLDAPUserStoreManager(config, null, null);
+                break;
+            }
+            case DEFAULT_JDBC_USERSTORE_MANAGER: {
+                userStoreManager = new JDBCUserStoreManager(config, new Hashtable<>(), null, null,
+                        SUPER_TENANT_ID);
+                break;
+            }
+            default: {
+                userStoreManager = (UserStoreManager) MicroIntegratorSecurityUtils.
+                        createObjectWithOptions(userStoreMgtClassStr, config);
+                break;
+            }
+        }
+        dataHolder.setUserStoreManager(userStoreManager);
     }
 
     public static boolean isFileBasedUserStoreEnabled() {
@@ -93,13 +88,11 @@ public class UserStoreManagerUtils {
     }
 
     public static String addDomainToName(String name, String domainName) {
-
-        if (!name.contains(UserStoreConstants.DOMAIN_SEPARATOR) &&
-                !UserStoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME.equalsIgnoreCase(domainName)) {
-            // domain name is not already appended, and if exist in user-mgt.xml, append it..
+        if (!name.contains(DOMAIN_SEPARATOR) && !PRIMARY_DEFAULT_DOMAIN_NAME.equalsIgnoreCase(domainName)) {
+            // domain name is not already appended, and if exist in user-mgt.xml, append it.
             if (domainName != null) {
                 // append domain name if exist
-                domainName = domainName.toUpperCase() + UserStoreConstants.DOMAIN_SEPARATOR;
+                domainName = domainName.toUpperCase() + DOMAIN_SEPARATOR;
                 name = domainName + name;
             }
         }
@@ -115,31 +108,25 @@ public class UserStoreManagerUtils {
      * @return
      */
     public static String[] addDomainToNames(String[] names, String domainName) {
-
         if (domainName != null) {
             domainName = domainName.toUpperCase();
         }
 
-        List<String> namesList = new ArrayList<String>();
-        if (names != null && names.length != 0) {
-            for (String name : names) {
-                if ((name.indexOf(UserStoreConstants.DOMAIN_SEPARATOR)) < 0 &&
-                        !UserStoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME.equalsIgnoreCase(domainName)) {
-                    if (domainName != null) {
-                        name = UserStoreManagerUtils.addDomainToName(name, domainName);
-                        namesList.add(name);
-                        continue;
-                    }
-                }
-                namesList.add(name);
-            }
-        }
-        if (namesList.size() != 0) {
-            return namesList.toArray(new String[namesList.size()]);
-        } else {
+        if (names == null || names.length == 0) {
             return names;
         }
+
+        List<String> namesList = new ArrayList<>();
+        for (String name : names) {
+            if (domainName != null &&
+                    !name.contains(DOMAIN_SEPARATOR) && !PRIMARY_DEFAULT_DOMAIN_NAME.equalsIgnoreCase(domainName)) {
+                name = UserStoreManagerUtils.addDomainToName(name, domainName);
+            }
+            namesList.add(name);
+        }
+        return namesList.toArray(new String[0]);
     }
+
 
     public static boolean isAdmin(String user) throws UserStoreException, DashboardUserStoreException {
         if (isFileBasedUserStoreEnabled()) {
@@ -160,15 +147,8 @@ public class UserStoreManagerUtils {
         return Arrays.asList(rolesList).contains(DataHolder.getInstance().getRealmConfig().getAdminRoleName());
     }
 
-    /**
-     * @param realmConfig
-     * @return
-     */
     public static String getDomainName(RealmConfiguration realmConfig) {
-        String domainName = realmConfig.getUserStoreProperty(UserStoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME);
-        if(domainName != null) {
-            domainName = domainName.toUpperCase();
-        }
-        return domainName;
+        String domainName = realmConfig.getUserStoreProperty(PROPERTY_DOMAIN_NAME);
+        return domainName != null ? domainName.toUpperCase() : null;
     }
 }

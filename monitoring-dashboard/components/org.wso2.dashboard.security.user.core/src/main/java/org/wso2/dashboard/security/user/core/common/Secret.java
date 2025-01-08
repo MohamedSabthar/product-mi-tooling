@@ -29,13 +29,12 @@ import java.util.Arrays;
 /**
  * This class wraps a character array to be used to handle sensitive data like passwords.
  */
-public class Secret {
+public class Secret implements AutoCloseable {
     private char[] chars;
     private byte[] bytes;
     private int accessCount;
 
     private Secret(char[] chars) {
-
         this.chars = chars;
         this.accessCount = 0;
     }
@@ -46,11 +45,9 @@ public class Secret {
      * @return char[]
      */
     public char[] getChars() {
-
         if (chars == null) {
             this.chars = ArrayUtils.EMPTY_CHAR_ARRAY;
         }
-
         return chars;
     }
 
@@ -60,7 +57,6 @@ public class Secret {
      * @return byte[]
      */
     public byte[] getBytes() {
-
         return getBytes(StandardCharsets.UTF_8);
     }
 
@@ -71,7 +67,6 @@ public class Secret {
      * @return byte[]
      */
     public byte[] getBytes(Charset charset) {
-
         clearBytes(bytes);
 
         CharBuffer charBuffer = CharBuffer.wrap(getChars());
@@ -88,7 +83,6 @@ public class Secret {
      * @return true if character array is null or empty, else return false
      */
     public boolean isEmpty() {
-
         return chars == null || chars.length < 1;
     }
 
@@ -98,7 +92,6 @@ public class Secret {
      * @param chars character array of the secret
      */
     public void setChars(char[] chars) {
-
         clearChars(this.chars);
         this.chars = chars;
     }
@@ -109,7 +102,6 @@ public class Secret {
      * @param chars character array to be added
      */
     public void addChars(char[] chars) {
-
         char[] previous = getChars();
         setChars(ArrayUtils.addAll(previous, chars));
         clearChars(previous);
@@ -123,7 +115,6 @@ public class Secret {
      * For proper operation, this method should be invoked once, per each invocation of getSecret factory method.
      */
     public void clear() {
-
         accessCount--;
         if (accessCount < 0) {
             clearChars(this.chars);
@@ -143,7 +134,6 @@ public class Secret {
      * @throws UnsupportedSecretTypeException thrown if the given secret is not either a Secret, char[] or String
      */
     public static Secret getSecret(Object secret) throws UnsupportedSecretTypeException {
-
         if (secret != null) {
             if (secret instanceof Secret) {
                 Secret secretObj = (Secret) secret;
@@ -164,16 +154,19 @@ public class Secret {
     }
 
     private void clearChars(char[] chars) {
-
         if (chars != null) {
             Arrays.fill(chars, '\u0000');
         }
     }
 
     private void clearBytes(byte[] bytes) {
-
         if (bytes != null) {
             Arrays.fill(bytes, (byte) 0);
         }
+    }
+
+    @Override
+    public void close() {
+        this.clear();
     }
 }

@@ -22,11 +22,15 @@ package org.wso2.ei.dashboard.core.rest.model;
  * Sample class used to de-serialize JSON response from management API.
  */
 public class User implements Comparable<User> {
+    private final String userId;
+
+    public User(String userId) {
+        this.userId = userId;
+    }
+
     public String getUserId() {
         return userId;
     }
-
-    private String userId;
 
     @Override
     public int compareTo(User o) {

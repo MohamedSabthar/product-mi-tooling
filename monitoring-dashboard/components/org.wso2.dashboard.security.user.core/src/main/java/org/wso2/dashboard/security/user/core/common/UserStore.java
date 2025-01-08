@@ -18,22 +18,15 @@
 
 package org.wso2.dashboard.security.user.core.common;
 
-import org.wso2.dashboard.security.user.core.UserStoreManager;
+import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
 public class UserStore {
-
     private UserStoreManager userStoreManager;
-
     private String domainAwareName;
-
     private String domainFreeName;
-
     private String domainName;
-
-    private boolean recurssive;
-
+    private boolean recursive;
     private boolean hybridRole;
-
     private boolean systemStore;
 
     public boolean isHybridRole() {
@@ -44,12 +37,12 @@ public class UserStore {
         this.hybridRole = hybridRole;
     }
 
-    public boolean isRecurssive() {
-        return recurssive;
+    public boolean isRecursive() {
+        return recursive;
     }
 
-    public void setRecurssive(boolean recurssive) {
-        this.recurssive = recurssive;
+    public void setRecursive(boolean recursive) {
+        this.recursive = recursive;
     }
 
     public UserStoreManager getUserStoreManager() {

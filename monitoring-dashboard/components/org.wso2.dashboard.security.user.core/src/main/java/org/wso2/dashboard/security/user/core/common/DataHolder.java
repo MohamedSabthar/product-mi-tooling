@@ -19,14 +19,13 @@
 package org.wso2.dashboard.security.user.core.common;
 
 import org.apache.axis2.context.ConfigurationContext;
-import org.wso2.dashboard.security.user.core.UserStoreManager;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
+import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
 /**
  * Store the realm configuration and user store manager for the Dashboard security scenarios
  */
 public class DataHolder {
-
     private RealmConfiguration realmConfig;
     private UserStoreManager userStoreManager;
     private ConfigurationContext configCtx;
