@@ -162,7 +162,7 @@ public class DatabaseUtil {
     }
 
     public static String[] getStringValuesFromDatabase(Connection dbConnection, String sqlStmt, Object... params)
-            throws DashboardUserStoreException {
+            throws UserStoreException {
         String[] values = new String[0];
         PreparedStatement prepStmt = null;
         ResultSet rs = null;

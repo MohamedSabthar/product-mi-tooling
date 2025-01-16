@@ -42,7 +42,7 @@ import static org.wso2.dashboard.security.user.core.UserStoreConstants.SUPER_TEN
 
 public class UserStoreManagerUtils {
 
-    public static UserStoreManager getUserStoreManager() throws UserStoreException, DashboardUserStoreException {
+    public static UserStoreManager getUserStoreManager() throws UserStoreException {
         DataHolder dataHolder = DataHolder.getInstance();
         if (dataHolder.getUserStoreManager() == null) {
             initializeUserStore();
@@ -50,7 +50,7 @@ public class UserStoreManagerUtils {
         return dataHolder.getUserStoreManager();
     }
 
-    public static void initializeUserStore() throws UserStoreException, DashboardUserStoreException {
+    public static void initializeUserStore() throws UserStoreException {
         DataHolder dataHolder = DataHolder.getInstance();
         if (isFileBasedUserStoreEnabled()) {
             dataHolder.setUserStoreManager(FileBasedUserStoreManager.getUserStoreManager());
@@ -128,7 +128,7 @@ public class UserStoreManagerUtils {
     }
 
 
-    public static boolean isAdmin(String user) throws UserStoreException, DashboardUserStoreException {
+    public static boolean isAdmin(String user) throws UserStoreException {
         if (isFileBasedUserStoreEnabled()) {
             return FileBasedUserStoreManager.getUserStoreManager().isAdmin(user);
         }

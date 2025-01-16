@@ -24,20 +24,24 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.dashboard.security.user.core.common.AbstractUserStoreManager;
 import org.wso2.dashboard.security.user.core.DatabaseUtil;
-import org.wso2.dashboard.security.user.core.UserStoreManager;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.dashboard.security.user.core.common.Secret;
 import org.wso2.dashboard.security.user.core.common.UnsupportedSecretTypeException;
 import org.wso2.micro.core.Constants;
+import org.wso2.micro.integrator.security.user.api.Permission;
+import org.wso2.micro.integrator.security.user.api.Properties;
 import org.wso2.micro.integrator.security.user.api.Property;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.core.UserCoreConstants;
 import org.wso2.micro.integrator.security.user.core.UserStoreException;
+import org.wso2.micro.integrator.security.user.core.UserStoreManager;
+import org.wso2.micro.integrator.security.user.core.claim.Claim;
 import org.wso2.micro.integrator.security.user.core.claim.ClaimManager;
 //import org.wso2.micro.integrator.security.user.core.common.AbstractUserStoreManager;
 import org.wso2.micro.integrator.security.user.core.hybrid.HybridRoleManager;
 import org.wso2.micro.integrator.security.user.core.ldap.LDAPConstants;
 import org.wso2.micro.integrator.security.user.core.profile.ProfileConfigurationManager;
+import org.wso2.micro.integrator.security.user.core.tenant.Tenant;
 import org.wso2.micro.integrator.security.user.core.util.JNDIUtil;
 
 import javax.cache.Cache;
@@ -52,10 +56,7 @@ import javax.naming.ldap.LdapContext;
 import javax.naming.ldap.LdapName;
 import javax.naming.ldap.Rdn;
 import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
@@ -272,7 +273,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
         }
     }
 
-    public boolean doAuthenticate(String userName, Object credential) throws DashboardUserStoreException {
+    public boolean doAuthenticate(String userName, Object credential) throws UserStoreException {
         boolean debug = log.isDebugEnabled();
 
         String failedUserDN = null;
@@ -338,13 +339,18 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     }
 
+    @Override
+    protected String[] doListUsers(String filter, int maxItemLimit) throws UserStoreException {
+        return new String[0];
+    }
+
     /**
      * This is to search user and retrieve ldap name directly from ldap
      * @param userName
      * @return
      * @throws DashboardUserStoreException
      */
-    protected String getNameInSpaceForUsernameFromLDAP(String userName) throws DashboardUserStoreException {
+    protected String getNameInSpaceForUsernameFromLDAP(String userName) throws UserStoreException {
 
         String searchBase = null;
         String userSearchFilter = realmConfig.getUserStoreProperty(LDAPConstants.USER_NAME_SEARCH_FILTER);
@@ -505,7 +511,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
      * @throws UserStoreException
      */
     protected String getNameInSpaceForUserName(String userName, String searchBase, String searchFilter)
-            throws UserStoreException, DashboardUserStoreException {
+            throws UserStoreException {
         boolean debug = log.isDebugEnabled();
 
         if (userName == null) {
@@ -562,7 +568,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
      * @throws UserStoreException
      */
     private boolean bindAsUser(String userName, String dn, Object credentials) throws NamingException,
-            UserStoreException, DashboardUserStoreException {
+            UserStoreException {
         boolean isAuthed = false;
         boolean debug = log.isDebugEnabled();
 
@@ -633,7 +639,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    protected String[] doGetExternalRoleListOfUser(String userName, String filter) throws DashboardUserStoreException {
+    protected String[] doGetExternalRoleListOfUser(String userName, String filter) throws UserStoreException {
         // Get the effective search base
         String searchBase = this.getEffectiveSearchBase(false);
         return getLDAPRoleListOfUser(userName, filter, searchBase, false);
@@ -641,7 +647,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     protected String[] doGetSharedRoleListOfUser(String userName, String tenantDomain, String filter)
-            throws DashboardUserStoreException {
+            throws UserStoreException {
         // Get the effective search base
         String searchBase = this.getEffectiveSearchBase(true);
         if (tenantDomain != null && tenantDomain.trim().length() > 0) {
@@ -691,7 +697,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     protected String[] getLDAPRoleListOfUser(String userName, String filter, String searchBase,
-                                             boolean shared) throws DashboardUserStoreException {
+                                             boolean shared) throws UserStoreException {
         if (userName == null) {
             throw new DashboardUserStoreException("userName value is null.");
         }
@@ -816,7 +822,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
      */
     private List<String> getListOfNames(String searchBases, String searchFilter,
                                         SearchControls searchCtls, String property, boolean appendDn)
-            throws DashboardUserStoreException {
+            throws UserStoreException {
         boolean debug = log.isDebugEnabled();
         List<String> names = new ArrayList<String>();
         DirContext dirContext = null;
@@ -878,13 +884,11 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     private static void closeContextAndNamingEnumeration(DirContext dirContext, NamingEnumeration<SearchResult> answer)
-            throws DashboardUserStoreException {
+            throws UserStoreException {
         JNDIUtil.closeNamingEnumeration(answer);
-        try {
+
             JNDIUtil.closeContext(dirContext);
-        } catch (UserStoreException e) {
-            throw new DashboardUserStoreException("Error occurred while closing the context", e);
-        }
+
     }
     
     /**
@@ -997,7 +1001,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
      * @return
      * @throws UserStoreException
      */
-    protected String getNameInSpaceForUserName(String userName) throws DashboardUserStoreException {
+    protected String getNameInSpaceForUserName(String userName) throws UserStoreException {
 
         // check the cache first
         LdapName ldn = null;
@@ -1081,17 +1085,242 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
         return new CompositeName().add(dn);
     }
 
+    @Override
+    public boolean isExistingUser(String s) throws UserStoreException {
+        return false;
+    }
+
+    @Override
+    public boolean isExistingRole(String s, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return false;
+    }
+
+    @Override
+    public boolean isExistingRole(String s) throws UserStoreException {
+        return false;
+    }
+
+    @Override
+    public String[] getRoleNames() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getRoleNames(boolean b) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getProfileNames(String s) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getUserListOfRole(String s) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String getUserClaimValue(String s, String s1, String s2) throws UserStoreException {
+        return "";
+    }
+
+    @Override
+    public Map<String, String> getUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
+        return Map.of();
+    }
+
+    @Override
+    public Claim[] getUserClaimValues(String s, String s1) throws UserStoreException {
+        return new Claim[0];
+    }
+
+    @Override
+    public String[] getAllProfileNames() throws UserStoreException {
+        return new String[0];
+    }
+
     /**
      * {@inheritDoc}
      */
-    public boolean isReadOnly() throws DashboardUserStoreException {
+    public boolean isReadOnly() {
         return true;
+    }
+
+    @Override
+    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1, boolean b) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateCredential(String s, Object o, Object o1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateCredentialByAdmin(String s, Object o) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUser(String s) throws UserStoreException {
+
+    }
+
+    @Override
+    public void addRole(String s, String[] strings, Permission[] permissions, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+
+    }
+
+    @Override
+    public void addRole(String s, String[] strings, Permission[] permissions) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+
+    }
+
+    @Override
+    public void deleteRole(String s) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateUserListOfRole(String s, String[] strings, String[] strings1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void updateRoleListOfUser(String s, String[] strings, String[] strings1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void setUserClaimValue(String s, String s1, String s2, String s3) throws UserStoreException {
+
+    }
+
+    @Override
+    public void setUserClaimValues(String s, Map<String, String> map, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUserClaimValue(String s, String s1, String s2) throws UserStoreException {
+
+    }
+
+    @Override
+    public void deleteUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public String[] getHybridRoles() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public String[] getAllSecondaryRoles() throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public Date getPasswordExpirationTime(String s) throws UserStoreException {
+        return null;
+    }
+
+    @Override
+    public int getUserId(String s) throws UserStoreException {
+        return 0;
+    }
+
+    @Override
+    public int getTenantId(String s) throws UserStoreException {
+        return 0;
     }
 
     /**
      *
      */
-    public int getTenantId() throws DashboardUserStoreException {
+    public int getTenantId() {
         return this.tenantId;
+    }
+
+    @Override
+    public Map<String, String> getProperties(org.wso2.micro.integrator.security.user.api.Tenant tenant) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return Map.of();
+    }
+
+    @Override
+    public Map<String, String> getProperties(Tenant tenant) throws UserStoreException {
+        return Map.of();
+    }
+
+    @Override
+    public void updateRoleName(String s, String s1) throws UserStoreException {
+
+    }
+
+    @Override
+    public boolean isMultipleProfilesAllowed() {
+        return false;
+    }
+
+    @Override
+    public void addRememberMe(String s, String s1) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+
+    }
+
+    @Override
+    public boolean isValidRememberMeToken(String s, String s1) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return false;
+    }
+
+    @Override
+    public org.wso2.micro.integrator.security.user.api.ClaimManager getClaimManager() throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return null;
+    }
+
+    @Override
+    public boolean isSCIMEnabled() throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        return false;
+    }
+
+    @Override
+    public Properties getDefaultUserStoreProperties() {
+        return null;
+    }
+
+    @Override
+    public boolean isBulkImportSupported() throws UserStoreException {
+        return false;
+    }
+
+    @Override
+    public String[] getUserList(String s, String s1, String s2) throws UserStoreException {
+        return new String[0];
+    }
+
+    @Override
+    public UserStoreManager getSecondaryUserStoreManager() {
+        return null;
+    }
+
+    @Override
+    public void setSecondaryUserStoreManager(UserStoreManager userStoreManager) {
+
+    }
+
+    @Override
+    public UserStoreManager getSecondaryUserStoreManager(String s) {
+        return null;
+    }
+
+    @Override
+    public void addSecondaryUserStoreManager(String s, UserStoreManager userStoreManager) {
+
     }
 }

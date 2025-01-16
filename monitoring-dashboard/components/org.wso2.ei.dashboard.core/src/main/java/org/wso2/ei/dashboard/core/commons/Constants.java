@@ -53,6 +53,8 @@ public final class Constants {
     public static final String SERVICES = "services";
     public static final String LISTENERS = "listeners";
     public static final String DOMAIN_SEPARATOR = "/";
+    public static final String IS_ADMIN = "isAdmin";
+    public static final String USER_ID = "userId";
 
     public static final String SUCCESS_STATUS = "success";
     public static final String FAIL_STATUS = "fail";

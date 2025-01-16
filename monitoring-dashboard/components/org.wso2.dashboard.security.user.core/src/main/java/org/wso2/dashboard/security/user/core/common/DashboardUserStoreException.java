@@ -17,7 +17,9 @@
  */
 package org.wso2.dashboard.security.user.core.common;
 
-public class DashboardUserStoreException extends Exception {
+import org.wso2.micro.integrator.security.user.core.UserStoreException;
+
+public class DashboardUserStoreException extends UserStoreException {
     private String errorCode;
 
     public DashboardUserStoreException() {

@@ -93,6 +93,7 @@ import org.wso2.ei.dashboard.micro.integrator.delegates.ServicesDelegate;
 import org.wso2.ei.dashboard.micro.integrator.delegates.TasksDelegate;
 import org.wso2.ei.dashboard.micro.integrator.delegates.TemplatesDelegate;
 import org.wso2.ei.dashboard.micro.integrator.delegates.UsersDelegate;
+import org.wso2.micro.integrator.security.user.api.UserStoreException;
 
 import java.util.List;
 import javax.validation.constraints.NotNull;
@@ -980,10 +981,10 @@ public class GroupsApi {
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Users");
         try {
-            UsersResourceResponse users = usersDelegate.fetchPaginatedUsers(groupId, searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
+            UsersResourceResponse users = usersDelegate.fetchPaginatedIcpUsers(searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
             responseBuilder = Response.ok().entity(users);
-        } catch (ManagementApiException e) {
-            responseBuilder = Response.status(e.getErrorCode()).entity(getError(e));
+        } catch (UserStoreException e) {
+            responseBuilder = Response.status(500);
         }
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();

@@ -144,12 +144,12 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                 return systemUserRoleManager.getSystemRoleListOfUser(userStore.getDomainFreeName());
             }
             return doGetRoleListOfUser(userName, "*");
-        } catch (DashboardUserStoreException | org.wso2.micro.integrator.security.user.api.UserStoreException e) {
+        } catch (org.wso2.micro.integrator.security.user.api.UserStoreException e) {
             throw new UserStoreException(e);
         }
     }
 
-    public final String[] doGetRoleListOfUser(String userName, String filter) throws DashboardUserStoreException {
+    public final String[] doGetRoleListOfUser(String userName, String filter) throws UserStoreException {
         if (!readGroupsEnabled) {
             return new String[0];
         }
@@ -215,7 +215,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         return true;
     }
 
-    protected boolean checkUserPasswordValid(Object credential) throws DashboardUserStoreException {
+    protected boolean checkUserPasswordValid(Object credential) throws UserStoreException {
         if (credential == null) {
             return false;
         }
@@ -291,7 +291,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      * @throws UserStoreException
      */
     protected abstract String[] doGetExternalRoleListOfUser(String userName, String filter)
-            throws DashboardUserStoreException;
+            throws UserStoreException;
 
     /**
      * Returns the shared roles list of the user
@@ -301,7 +301,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      * @throws UserStoreException
      */
     protected abstract String[] doGetSharedRoleListOfUser(String userName, String tenantDomain, String filter)
-            throws DashboardUserStoreException;
+            throws UserStoreException;
 
     /**
      * Given the username and a credential object, the implementation code must validate whether
@@ -315,9 +315,10 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      * @throws UserStoreException An unexpected exception has occurred
      */
     protected abstract boolean doAuthenticate(String userName, Object credential)
-            throws DashboardUserStoreException;
+            throws UserStoreException;
 
 
+    // TODO: sabthar, 2ndry user store - see code in MI
     public final String[] listUsers(String filter, int maxItemLimit) throws UserStoreException {
         return doListUsers(filter, maxItemLimit);
     }
