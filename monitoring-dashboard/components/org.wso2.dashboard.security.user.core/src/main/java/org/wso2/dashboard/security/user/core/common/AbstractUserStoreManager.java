@@ -23,24 +23,34 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
+import org.wso2.micro.integrator.security.user.core.UserCoreConstants;
 import org.wso2.micro.integrator.security.user.core.UserRealm;
 import org.wso2.micro.integrator.security.user.core.UserStoreException;
 import org.wso2.micro.integrator.security.user.core.UserStoreManager;
 import org.wso2.micro.integrator.security.user.core.claim.ClaimManager;
+import org.wso2.micro.integrator.security.user.core.claim.ClaimMapping;
+import org.wso2.micro.integrator.security.user.core.common.RoleContext;
+import org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants;
 import org.wso2.micro.integrator.security.user.core.hybrid.HybridRoleManager;
+import org.wso2.micro.integrator.security.user.core.internal.UMListenerServiceComponent;
+import org.wso2.micro.integrator.security.user.core.listener.SecretHandleableListener;
+import org.wso2.micro.integrator.security.user.core.listener.UserOperationEventListener;
+import org.wso2.micro.integrator.security.user.core.listener.UserStoreManagerListener;
+import org.wso2.micro.integrator.security.user.core.multiplecredentials.UserAlreadyExistsException;
 import org.wso2.micro.integrator.security.user.core.system.SystemUserRoleManager;
+import org.wso2.micro.integrator.security.user.core.util.UserCoreUtil;
 
 import javax.sql.DataSource;
 import java.nio.CharBuffer;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.apache.axis2.clustering.ClusteringConstants.Parameters.APPLICATION_DOMAIN;
+import static org.wso2.carbon.user.core.UserCoreConstants.WORKFLOW_DOMAIN;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.DOMAIN_SEPARATOR;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.REGISTRY_SYSTEM_USERNAME;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.LEADING_OR_TRAILING_SPACE_ALLOWED_IN_USERNAME;
@@ -325,4 +335,224 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
 
     protected abstract String[] doListUsers(String filter, int maxItemLimit)
             throws UserStoreException;
+
+    protected abstract RoleContext createRoleContext(String roleName) throws UserStoreException;
+
+    @Override
+    public void addUser(String userName, Object credential, String[] roleList,
+                        Map<String, String> claims, String profileName, boolean requirePasswordChange)
+            throws UserStoreException {
+
+        if (StringUtils.isEmpty(userName)) {
+            String regEx = realmConfig
+                    .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG_EX);
+            //Inorder to support both UsernameJavaRegEx and UserNameJavaRegEx.
+            if (StringUtils.isEmpty(regEx) || StringUtils.isEmpty(regEx.trim())) {
+                regEx = realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG);
+            }
+            String message = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_USER_NAME.getMessage(), null, regEx);
+            String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_USER_NAME.getCode();
+
+            throw new UserStoreException(errorCode + " - " + message);
+        }
+
+        UserStore userStore = getUserStore(userName);
+
+        Secret credentialObj;
+        try {
+            credentialObj = Secret.getSecret(credential);
+        } catch (UnsupportedSecretTypeException e) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString(), e);
+        }
+
+        try {
+            if (userStore.isSystemStore()) {
+                systemUserRoleManager.addSystemUser(userName, credentialObj, roleList);
+                return;
+            }
+
+            // #################### Domain Name Free Zone Starts Here ################################
+
+            if (isReadOnly()) {
+                throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            }
+            // This happens only once during first startup - adding administrator user/role.
+            // TODO: sabthar, fix the below comment
+//            if (userName.indexOf(UserCoreConstants.DOMAIN_SEPARATOR) > 0) {
+//                userName = userStore.getDomainFreeName();
+//                roleList = UserCoreUtil.removeDomainFromNames(roleList);
+//            }
+            if (roleList == null) {
+                roleList = new String[0];
+            }
+            if (claims == null) {
+                claims = new HashMap<>();
+            }
+
+            if (!checkUserNameValid(userStore.getDomainFreeName())) {
+                String regEx = realmConfig
+                        .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG_EX);
+                //Inorder to support both UsernameJavaRegEx and UserNameJavaRegEx.
+                if (StringUtils.isEmpty(regEx) || StringUtils.isEmpty(regEx.trim())) {
+                    regEx = realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG);
+                }
+                String message = String
+                        .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_USER_NAME.getMessage(), userStore.getDomainFreeName(),
+                                regEx);
+                String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_USER_NAME.getCode();
+
+                throw new UserStoreException(errorCode + " - " + message);
+            }
+
+            if (!checkUserPasswordValid(credentialObj)) {
+                String regEx = realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_JAVA_REG_EX);
+                String message = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getMessage(), regEx);
+                String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getCode();
+
+                throw new UserStoreException(errorCode + " - " + message);
+            }
+
+            if (doCheckExistingUser(userStore.getDomainFreeName())) {
+                String message = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_USER_ALREADY_EXISTS.getMessage(), userName);
+                String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_USER_ALREADY_EXISTS.getCode();
+
+                throw new UserAlreadyExistsException(errorCode + " - " + message);
+            }
+
+            List<String> internalRoles = new ArrayList<String>();
+            List<String> externalRoles = new ArrayList<String>();
+            int index;
+            if (roleList != null) {
+                for (String role : roleList) {
+                    if (role != null && role.trim().length() > 0) {
+                        // TODO: sabthar, fix this comment
+//                        index = role.indexOf(UserCoreConstants.DOMAIN_SEPARATOR);
+//                        if (index > 0) {
+//                            String domain = role.substring(0, index);
+//                            if (UserCoreConstants.INTERNAL_DOMAIN.equalsIgnoreCase(domain)) {
+//                                internalRoles.add(UserCoreUtil.removeDomainFromName(role));
+//                                continue;
+//                            } else if (APPLICATION_DOMAIN.equalsIgnoreCase(domain) || WORKFLOW_DOMAIN
+//                                    .equalsIgnoreCase(domain)) {
+//                                internalRoles.add(role);
+//                                continue;
+//                            }
+//                        }
+//                        externalRoles.add(UserCoreUtil.removeDomainFromName(role));
+                        externalRoles.add(role); // TODO: sabthar, added for testing
+                    }
+                }
+            }
+
+            // check existence of roles and claims before adding user
+            for (String internalRole : internalRoles) {
+                if (!hybridRoleManager.isExistingRole(internalRole)) {
+                    String message = String
+                            .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INTERNAL_ROLE_NOT_EXISTS.getMessage(), internalRole);
+                    String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INTERNAL_ROLE_NOT_EXISTS.getCode();
+
+                    throw new UserStoreException(errorCode + " - " + message);
+                }
+            }
+
+            for (String externalRole : externalRoles) {
+                if (!doCheckExistingRole(externalRole)) {
+                    String message = String
+                            .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_EXTERNAL_ROLE_NOT_EXISTS.getMessage(), externalRole);
+                    String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_EXTERNAL_ROLE_NOT_EXISTS.getCode();
+
+                    throw new UserStoreException(errorCode + " - " + message);
+                }
+            }
+
+            if (claims != null) {
+                for (Map.Entry<String, String> entry : claims.entrySet()) {
+                    ClaimMapping claimMapping;
+                    try {
+                        claimMapping = (ClaimMapping) claimManager.getClaimMapping(entry.getKey());
+                    } catch (org.wso2.micro.integrator.security.user.api.UserStoreException e) {
+                        String errorMessage = String
+                                .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getMessage(),
+                                        "persisting user attributes.");
+                        String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getCode();
+                        throw new UserStoreException(errorCode + " - " + errorMessage, e);
+                    }
+                    if (claimMapping == null) {
+                        String errorMessage = String
+                                .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_CLAIM_URI.getMessage(), entry.getKey());
+                        String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_CLAIM_URI.getCode();
+
+                        throw new UserStoreException(errorCode + " - " + errorMessage);
+                    }
+                }
+            }
+
+            try {
+                doAddUser(userName, credentialObj, externalRoles.toArray(new String[externalRoles.size()]), claims,
+                        profileName, requirePasswordChange);
+            } catch (UserStoreException ex) {
+
+                throw ex;
+            }
+
+            if (internalRoles.size() > 0) {
+                hybridRoleManager.updateHybridRoleListOfUser(userName, null,
+                        internalRoles.toArray(new String[internalRoles.size()]));
+            }
+
+            try {
+                for (UserOperationEventListener listener : UMListenerServiceComponent
+                        .getUserOperationEventListeners()) {
+                    Object credentialArgument;
+                    if (listener instanceof SecretHandleableListener) {
+                        credentialArgument = credentialObj;
+                    } else {
+                        credentialArgument = credential;
+                    }
+
+                    if (!listener.doPostAddUser(userName, credentialArgument, roleList, claims, profileName, this)) {
+
+                        return;
+                    }
+                }
+            } catch (UserStoreException ex) {
+
+                throw ex;
+            }
+        } finally {
+            credentialObj.clear();
+        }
+
+    }
+
+    /**
+     * @param userName
+     * @return
+     * @throws UserStoreException
+     */
+    protected abstract boolean doCheckExistingUser(String userName) throws UserStoreException;
+
+
+    /**
+     * Add a user to the user store.
+     *
+     * @param userName              User name of the user
+     * @param credential            The credential/password of the user
+     * @param roleList              The roles that user belongs
+     * @param claims                Properties of the user
+     * @param profileName           profile name, can be null. If null the default profile is considered.
+     * @param requirePasswordChange whether password required is need
+     * @throws UserStoreException An unexpected exception has occurred
+     */
+    protected abstract void  doAddUser(String userName, Object credential, String[] roleList,
+                                       Map<String, String> claims, String profileName, boolean requirePasswordChange)
+            throws UserStoreException;
+
+
+    /**
+     * @param roleName
+     * @return
+     */
+    protected abstract boolean doCheckExistingRole(String roleName) throws UserStoreException;
+
 }

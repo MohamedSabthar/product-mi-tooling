@@ -161,7 +161,12 @@ public class GroupsApi {
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid AddUserRequest request) throws ManagementApiException {
         UsersDelegate usersDelegate = new UsersDelegate();
-        Ack ack = usersDelegate.addUser(groupId, request);
+        Ack ack = null;
+        try {
+            ack = usersDelegate.addUserIcp(request);
+        } catch (UserStoreException e) {
+            throw new RuntimeException(e);
+        }
         Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();

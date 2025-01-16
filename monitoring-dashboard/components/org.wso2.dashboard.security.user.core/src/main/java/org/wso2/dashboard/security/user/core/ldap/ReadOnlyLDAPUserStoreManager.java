@@ -38,6 +38,7 @@ import org.wso2.micro.integrator.security.user.core.UserStoreManager;
 import org.wso2.micro.integrator.security.user.core.claim.Claim;
 import org.wso2.micro.integrator.security.user.core.claim.ClaimManager;
 //import org.wso2.micro.integrator.security.user.core.common.AbstractUserStoreManager;
+import org.wso2.micro.integrator.security.user.core.common.RoleContext;
 import org.wso2.micro.integrator.security.user.core.hybrid.HybridRoleManager;
 import org.wso2.micro.integrator.security.user.core.ldap.LDAPConstants;
 import org.wso2.micro.integrator.security.user.core.profile.ProfileConfigurationManager;
@@ -342,6 +343,11 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     @Override
     protected String[] doListUsers(String filter, int maxItemLimit) throws UserStoreException {
         return new String[0];
+    }
+
+    @Override
+    protected RoleContext createRoleContext(String roleName) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -1155,6 +1161,21 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     @Override
     public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1, boolean b) throws UserStoreException {
 
+    }
+
+    @Override
+    protected boolean doCheckExistingUser(String userName) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void doAddUser(String userName, Object credential, String[] roleList, Map<String, String> claims, String profileName, boolean requirePasswordChange) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected boolean doCheckExistingRole(String roleName) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
 
     @Override

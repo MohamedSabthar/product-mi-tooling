@@ -33,6 +33,7 @@ import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.core.UserStoreException;
 import org.wso2.micro.integrator.security.user.core.UserStoreManager;
 import org.wso2.micro.integrator.security.user.core.claim.Claim;
+import org.wso2.micro.integrator.security.user.core.common.RoleContext;
 import org.wso2.micro.integrator.security.user.core.tenant.Tenant;
 import org.wso2.securevault.SecretResolver;
 import org.wso2.securevault.SecretResolverFactory;
@@ -151,6 +152,11 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
+    protected RoleContext createRoleContext(String roleName) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public boolean authenticate(final String userName, final Object credential) {
         if (userName == null || credential == null) {
             return false;
@@ -240,12 +246,27 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1) throws UserStoreException {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1, boolean b) throws UserStoreException {
 
+    }
+
+    @Override
+    protected boolean doCheckExistingUser(String userName) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void doAddUser(String userName, Object credential, String[] roleList, Map<String, String> claims, String profileName, boolean requirePasswordChange) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected boolean doCheckExistingRole(String roleName) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
 
     @Override

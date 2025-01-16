@@ -30,6 +30,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
 
 import org.jetbrains.annotations.NotNull;
+import org.wso2.dashboard.security.user.core.UserStore;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
@@ -47,6 +48,7 @@ import org.wso2.ei.dashboard.core.rest.model.UsersResourceResponse;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
 import org.wso2.micro.integrator.security.user.api.UserStoreException;
+import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -159,6 +161,18 @@ public class UsersDelegate {
                 }
             }
         }
+        return ack;
+    }
+
+
+    public Ack addUserIcp(AddUserRequest request) throws UserStoreException {
+        log.debug("Adding user " + request.getUserId() + " to icp");
+        UserStoreManager manager = UserStoreManagerUtils.getUserStoreManager();
+        synchronized (this) {
+            String[] roleList  = request.isIsAdmin() ? new String[]{"admin"}: new String[]{};
+            manager.addUser(request.getUserId(), request.getPassword(), roleList, null, null, false);
+        }
+        Ack ack =  new Ack(SUCCESS_STATUS);
         return ack;
     }
 

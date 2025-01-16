@@ -23,42 +23,45 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.dashboard.security.user.core.*;
-import org.wso2.dashboard.security.user.core.common.AbstractUserStoreManager;
-import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
-import org.wso2.dashboard.security.user.core.common.Secret;
-import org.wso2.dashboard.security.user.core.common.UnsupportedSecretTypeException;
+import org.wso2.dashboard.security.user.core.common.*;
+import org.wso2.micro.core.util.DatabaseCreator;
 import org.wso2.micro.integrator.security.user.api.Permission;
 import org.wso2.micro.integrator.security.user.api.Properties;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
-import org.wso2.micro.integrator.security.user.core.UserCoreConstants;
-import org.wso2.micro.integrator.security.user.core.UserRealm;
-import org.wso2.micro.integrator.security.user.core.UserStoreException;
+import org.wso2.micro.integrator.security.user.core.*;
 import org.wso2.micro.integrator.security.user.core.claim.Claim;
 import org.wso2.micro.integrator.security.user.core.claim.ClaimManager;
+import org.wso2.micro.integrator.security.user.core.claim.ClaimMapping;
+import org.wso2.micro.integrator.security.user.core.common.RoleContext;
+import org.wso2.micro.integrator.security.user.core.common.UserStore;
+import org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants;
+import org.wso2.micro.integrator.security.user.core.internal.UMListenerServiceComponent;
+import org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants;
+import org.wso2.micro.integrator.security.user.core.jdbc.JDBCRoleContext;
+import org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants;
+import org.wso2.micro.integrator.security.user.core.ldap.LDAPConstants;
+import org.wso2.micro.integrator.security.user.core.listener.SecretHandleableListener;
+import org.wso2.micro.integrator.security.user.core.listener.UserOperationEventListener;
+import org.wso2.micro.integrator.security.user.core.listener.UserStoreManagerListener;
+import org.wso2.micro.integrator.security.user.core.multiplecredentials.UserAlreadyExistsException;
 import org.wso2.micro.integrator.security.user.core.tenant.Tenant;
 import org.wso2.micro.integrator.security.user.core.util.JDBCRealmUtil;
-import org.wso2.micro.integrator.security.user.core.UserStoreManager;
+import org.wso2.micro.integrator.security.user.core.util.UserCoreUtil;
 
 import javax.sql.DataSource;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.SQLTimeoutException;
-import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
+import java.security.SecureRandom;
+import java.sql.*;
+import java.util.*;
 import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
 
+import static org.apache.axis2.clustering.ClusteringConstants.Parameters.APPLICATION_DOMAIN;
+import static org.wso2.carbon.user.core.UserCoreConstants.WORKFLOW_DOMAIN;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.READ_GROUPS_ENABLED;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.WRITE_GROUPS_ENABLED;
+import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DUPLICATE_WHILE_ADDING_A_USER;
+import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DUPLICATE_WHILE_WRITING_TO_DATABASE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.*;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.SELECT_USER;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.*;
@@ -67,7 +70,9 @@ import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.
 public class JDBCUserStoreManager extends AbstractUserStoreManager {
     private static final Log log = LogFactory.getLog(JDBCUserStoreManager.class);
     private static final String CASE_INSENSITIVE_USERNAME = "CaseInsensitiveUsername";
+    private static final String SHA_1_PRNG = "SHA1PRNG";
     protected DataSource jdbcds = null;
+    private static final String DISAPLAY_NAME_CLAIM = "http://wso2.org/claims/displayName";
 
     public JDBCUserStoreManager(RealmConfiguration realmConfig, Map<String, Object> properties,
                                 ClaimManager claimManager, UserRealm realm, Integer tenantId)
@@ -511,11 +516,6 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1, boolean b) throws UserStoreException {
-
-    }
-
-    @Override
     public void updateCredential(String s, Object o, Object o1) throws UserStoreException {
 
     }
@@ -735,6 +735,618 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
     @Override
     public Map<String, String> getProperties(org.wso2.micro.integrator.security.user.api.Tenant tenant) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
         throw new UnsupportedOperationException();
+    }
+
+    /**
+     *
+     */
+    public void doAddUser(String userName, Object credential, String[] roleList,
+                          Map<String, String> claims, String profileName, boolean requirePasswordChange)
+            throws UserStoreException {
+
+        String userID = UUID.randomUUID().toString();
+
+        // persist the user info. in the database.
+        persistUser(userID, userName, credential, roleList, claims, profileName, requirePasswordChange);
+
+    }
+
+
+
+    /**
+     * This private method returns a saltValue using SecureRandom.
+     *
+     * @return saltValue
+     */
+    private String generateSaltValue() {
+        String saltValue = null;
+        try {
+            SecureRandom secureRandom = SecureRandom.getInstance(SHA_1_PRNG);
+            byte[] bytes = new byte[16];
+            //secureRandom is automatically seeded by calling nextBytes
+            secureRandom.nextBytes(bytes);
+            saltValue = Base64.encode(bytes);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA1PRNG algorithm could not be found.");
+        }
+        return saltValue;
+    }
+
+    /**
+     * @param dbConnection
+     * @param sqlStmt
+     * @param params
+     * @throws UserStoreException
+     */
+    private void updateStringValuesToDatabase(Connection dbConnection, String sqlStmt,
+                                              Object... params) throws UserStoreException {
+        PreparedStatement prepStmt = null;
+        boolean localConnection = false;
+        try {
+            if (dbConnection == null) {
+                localConnection = true;
+                dbConnection = getDBConnection();
+            }
+            prepStmt = dbConnection.prepareStatement(sqlStmt);
+            if (params != null && params.length > 0) {
+                for (int i = 0; i < params.length; i++) {
+                    Object param = params[i];
+                    if (param == null) {
+                        throw new UserStoreException("Invalid data provided");
+                    } else if (param instanceof String) {
+                        prepStmt.setString(i + 1, (String) param);
+                    } else if (param instanceof Integer) {
+                        prepStmt.setInt(i + 1, (Integer) param);
+                    } else if (param instanceof Date) {
+                        // Timestamp timestamp = new Timestamp(((Date) param).getTime());
+                        // prepStmt.setTimestamp(i + 1, timestamp);
+                        prepStmt.setTimestamp(i + 1, new Timestamp(System.currentTimeMillis()));
+                    } else if (param instanceof Boolean) {
+                        prepStmt.setBoolean(i + 1, (Boolean) param);
+                    }
+                }
+            }
+            int count = prepStmt.executeUpdate();
+
+            if (log.isDebugEnabled()) {
+                if (count == 0) {
+                    log.debug("No rows were updated");
+                }
+                log.debug("Executed query is " + sqlStmt + " and number of updated rows :: "
+                        + count);
+            }
+
+            if (localConnection) {
+                dbConnection.commit();
+            }
+        } catch (SQLException e) {
+            String msg = "Error occurred while updating string values to database.";
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            if (e instanceof SQLIntegrityConstraintViolationException) {
+                // Duplicate entry
+                throw new UserStoreException(msg, ERROR_CODE_DUPLICATE_WHILE_WRITING_TO_DATABASE.getCode(), e);
+            } else {
+                // Other SQL Exception
+                throw new UserStoreException(msg, e);
+            }
+        } finally {
+            if (localConnection) {
+                DatabaseUtil.closeAllConnections(dbConnection);
+            }
+            DatabaseUtil.closeAllConnections(null, prepStmt);
+        }
+    }
+
+
+    /*
+     * This method persists the user information in the database.
+     */
+    protected void persistUser(String userID, String userName, Object credential, String[] roleList,
+                               Map<String, String> claims, String profileName, boolean requirePasswordChange)
+            throws UserStoreException {
+
+        Connection dbConnection = null;
+        try{
+            dbConnection = getDBConnection();
+        }catch (SQLException e){
+            String errorMessage = "Error occurred while getting DB connection";
+            if (log.isDebugEnabled()) {
+                log.debug(errorMessage, e);
+            }
+            throw new UserStoreException(errorMessage, e);
+        }
+
+        Secret credentialObj;
+        try {
+            credentialObj = Secret.getSecret(credential);
+        } catch (UnsupportedSecretTypeException e) {
+            throw new UserStoreException("Unsupported credential type", e);
+        }
+
+        try {
+            String sqlStmt1 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_WITH_ID);
+
+            String saltValue = null;
+
+            if ("true".equalsIgnoreCase(realmConfig.getUserStoreProperties()
+                    .get(JDBCRealmConstants.STORE_SALTED_PASSWORDS))) {
+                saltValue = generateSaltValue();
+            }
+
+            String password = this.preparePassword(credentialObj, saltValue);
+
+            // do all 4 possibilities
+            if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN) && (saltValue == null)) {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, userID, userName, password, "",
+                        requirePasswordChange, new Date(), tenantId);
+            } else if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN) && (saltValue != null)) {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, userID, userName, password,
+                        saltValue, requirePasswordChange, new Date(),
+                        tenantId);
+            } else if (!sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN) &&
+                    (saltValue == null)) {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, userID, userName, password, "",
+                        requirePasswordChange, new Date());
+            } else {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, userID, userName, password, saltValue,
+                        requirePasswordChange, new Date());
+            }
+
+            if (roleList != null && roleList.length > 0) {
+
+                RoleBreakdown breakdown = getSharedRoleBreakdown(roleList);
+                String[] roles = breakdown.getRoles();
+                // Integer[] tenantIds = breakdown.getTenantIds();
+
+                String[] sharedRoles = breakdown.getSharedRoles();
+                Integer[] sharedTenantIds = breakdown.getTenantIds();
+
+                String sqlStmt2 = null;
+                String type = DatabaseCreator.getDatabaseType(dbConnection);
+                if (roles.length > 0) {
+                    // Adding user to the non shared roles
+                    if (isCaseSensitiveUsername()) {
+                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_ROLE_TO_USER + "-" + type);
+                    } else {
+                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
+                                .ADD_ROLE_TO_USER_CASE_INSENSITIVE + "-" + type);
+                    }
+                    if (sqlStmt2 == null) {
+                        if (isCaseSensitiveUsername()) {
+                            sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_ROLE_TO_USER);
+                        } else {
+                            sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
+                                    .ADD_ROLE_TO_USER_CASE_INSENSITIVE);
+                        }
+                    }
+
+                    if (sqlStmt2.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                        if (UserCoreConstants.OPENEDGE_TYPE.equals(type)) {
+                            DatabaseUtil.udpateUserRoleMappingInBatchMode(dbConnection, sqlStmt2,
+                                    tenantId, roles,
+                                    tenantId, userName,
+                                    tenantId);
+                        } else {
+                            DatabaseUtil.udpateUserRoleMappingInBatchMode(dbConnection, sqlStmt2,
+                                    roles, tenantId,
+                                    userName, tenantId,
+                                    tenantId);
+                        }
+                    } else {
+                        DatabaseUtil.udpateUserRoleMappingInBatchMode(dbConnection, sqlStmt2, roleList, userName);
+                    }
+
+                }
+                if (sharedRoles.length > 0) {
+                    // Adding user to the shared roles
+                    if (isCaseSensitiveUsername()) {
+                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_SHARED_ROLE_TO_USER);
+                    } else {
+                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
+                                .ADD_SHARED_ROLE_TO_USER_CASE_INSENSITIVE);
+                    }
+                    DatabaseUtil.udpateUserRoleMappingWithExactParams(dbConnection, sqlStmt2,
+                            sharedRoles, userName,
+                            sharedTenantIds, tenantId);
+                }
+
+            }
+
+            if (claims != null) {
+                // add the properties
+                if (profileName == null) {
+                    profileName = UserCoreConstants.DEFAULT_PROFILE;
+                }
+
+                addProperties(dbConnection, userName, claims, profileName);
+            }
+
+            dbConnection.commit();
+        } catch (Exception e) {
+            try {
+                dbConnection.rollback();
+            } catch (SQLException e1) {
+                String errorMessage = "Error rollbacking add user operation for user : " + userName;
+                if (log.isDebugEnabled()) {
+                    log.debug(errorMessage, e1);
+                }
+                throw new UserStoreException(errorMessage, e1);
+            }
+            String errorMessage = "Error while persisting user : " + userName;
+            if (log.isDebugEnabled()) {
+                log.debug(errorMessage, e);
+            }
+            if (e instanceof UserStoreException && ERROR_CODE_DUPLICATE_WHILE_WRITING_TO_DATABASE.getCode().equals((
+                    (UserStoreException) e).getErrorCode())) {
+                // Duplicate entry
+                throw new UserStoreException(errorMessage, ERROR_CODE_DUPLICATE_WHILE_ADDING_A_USER.getCode(), e);
+            } else {
+                // Other SQL Exception
+                throw new UserStoreException(errorMessage, e);
+            }
+        } finally {
+            credentialObj.clear();
+            DatabaseUtil.closeAllConnections(dbConnection);
+        }
+    }
+
+    /**
+     * Break the provided role list based on whether roles are shared or not
+     *
+     * @param rolesList
+     * @return
+     */
+    private RoleBreakdown getSharedRoleBreakdown(String[] rolesList) {
+        List<String> roles = new ArrayList<String>();
+        List<Integer> tenantIds = new ArrayList<Integer>();
+
+        List<String> sharedRoles = new ArrayList<String>();
+        List<Integer> sharedTenantIds = new ArrayList<Integer>();
+
+        for (String role : rolesList) {
+
+            if (StringUtils.isNotEmpty(role)) {
+//                String[] deletedRoleNames = role.split(UserCoreConstants.DOMAIN_SEPARATOR);
+                // TODO: sabthar, fix this temporary domain name seperator
+                String[] deletedRoleNames = role.split("/");
+                if (deletedRoleNames.length > 1) {
+                    role = deletedRoleNames[1];
+                }
+
+                JDBCRoleContext ctx = (JDBCRoleContext) createRoleContext(role);
+                role = ctx.getRoleName();
+                int roleTenantId = ctx.getTenantId();
+                boolean isShared = ctx.isShared();
+
+                if (isShared) {
+                    sharedRoles.add(role);
+                    sharedTenantIds.add(roleTenantId);
+                } else {
+                    roles.add(role);
+                    tenantIds.add(roleTenantId);
+                }
+            }
+
+        }
+
+        RoleBreakdown breakdown = new RoleBreakdown();
+
+        // Non shared roles and tenant ids
+        breakdown.setRoles(roles.toArray(new String[roles.size()]));
+        breakdown.setTenantIds(tenantIds.toArray(new Integer[tenantIds.size()]));
+
+        // Shared roles and tenant ids
+        breakdown.setSharedRoles(sharedRoles.toArray(new String[sharedRoles.size()]));
+        breakdown.setSharedTenantIDs(sharedTenantIds.toArray(new Integer[sharedTenantIds.size()]));
+
+        return breakdown;
+
+    }
+
+    @Override
+    protected RoleContext createRoleContext(String roleName) {
+
+        JDBCRoleContext searchCtx = new JDBCRoleContext();
+        String[] roleNameParts;
+
+        if (isSharedGroupEnabled()) {
+            roleNameParts = roleName.split(UserCoreConstants.TENANT_DOMAIN_COMBINER);
+            if (roleNameParts.length > 1 && (roleNameParts[1] == null || roleNameParts[1].equals("null"))) {
+                roleNameParts = new String[]{roleNameParts[0]};
+            }
+        } else {
+            roleNameParts = new String[]{roleName};
+        }
+
+        int tenantId = -1;
+        if (roleNameParts.length > 1) {
+            tenantId = Integer.parseInt(roleNameParts[1]);
+            searchCtx.setTenantId(tenantId);
+        } else {
+            tenantId = this.tenantId;
+            searchCtx.setTenantId(tenantId);
+        }
+
+        if (tenantId != this.tenantId) {
+            searchCtx.setShared(true);
+        }
+
+        searchCtx.setRoleName(roleNameParts[0]);
+        return searchCtx;
+    }
+
+    /**
+     * Add properties as a batch
+     *
+     * @param dbConnection
+     * @param userName
+     * @param properties
+     * @param profileName
+     * @throws org.wso2.micro.integrator.security.user.api.UserStoreException
+     */
+    private void addProperties(Connection dbConnection, String userName, Map<String, String> properties,
+                               String profileName) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        String type;
+        try {
+            type = DatabaseCreator.getDatabaseType(dbConnection);
+        } catch (Exception e) {
+            String msg = "Error occurred while adding user properties for user : " + userName;
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        }
+
+        String sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_PROPERTY + "-" + type);
+        if (sqlStmt == null) {
+            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_PROPERTY);
+        }
+        if (sqlStmt == null) {
+            throw new UserStoreException("The sql statement for add user property sql is null");
+        }
+
+        PreparedStatement prepStmt = null;
+        boolean localConnection = false;
+
+        try {
+            if (dbConnection == null) {
+                localConnection = true;
+                dbConnection = getDBConnection();
+            }
+            prepStmt = dbConnection.prepareStatement(sqlStmt);
+
+            Map<String, String> userAttributes = new HashMap<>();
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                String attributeName = getClaimAtrribute(entry.getKey(), userName, null);
+                String attributeValue = entry.getValue();
+                userAttributes.put(attributeName, attributeValue);
+            }
+
+            for (Map.Entry<String, String> entry : userAttributes.entrySet()) {
+                String propertyName = entry.getKey();
+                String propertyValue = entry.getValue();
+                if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                    if (UserCoreConstants.OPENEDGE_TYPE.equals(type)) {
+                        batchUpdateStringValuesToDatabase(prepStmt, propertyName, propertyValue, profileName,
+                                tenantId, userName, tenantId);
+                    } else {
+                        batchUpdateStringValuesToDatabase(prepStmt, userName, tenantId, propertyName, propertyValue,
+                                profileName, tenantId);
+                    }
+                } else {
+                    batchUpdateStringValuesToDatabase(prepStmt, userName, propertyName, propertyValue, profileName);
+                }
+            }
+
+            int[] counts = prepStmt.executeBatch();
+            if (log.isDebugEnabled()) {
+                int totalUpdated = 0;
+                if (counts != null) {
+                    for (int i : counts) {
+                        totalUpdated += i;
+                    }
+                }
+
+                if (totalUpdated == 0) {
+                    log.debug("No rows were updated");
+                }
+                log.debug("Executed query is " + sqlStmt + " and number of updated rows :: " + totalUpdated);
+            }
+
+            if (localConnection) {
+                dbConnection.commit();
+            }
+        } catch (SQLException e) {
+            String msg = "Error occurred while updating string values to database.";
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        } finally {
+            if (localConnection) {
+                DatabaseUtil.closeAllConnections(dbConnection);
+            }
+            DatabaseUtil.closeAllConnections(null, prepStmt);
+        }
+    }
+
+    /**
+     * Get the attribute for the provided claim uri and identifier.
+     *
+     * @param claimURI
+     * @param identifier user name or role.
+     * @param domainName TODO
+     * @return claim attribute value. NULL if attribute is not defined for the
+     * claim uri
+     * @throws org.wso2.micro.integrator.security.user.api.UserStoreException
+     */
+    protected String getClaimAtrribute(String claimURI, String identifier, String domainName)
+            throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+        domainName = realmConfig.getUserStoreProperty(UserStoreConfigConstants.DOMAIN_NAME);
+        String attributeName = null;
+        if (domainName != null && !domainName.equals(UserStoreConfigConstants.PRIMARY)) {
+            attributeName = claimManager.getAttributeName(domainName, claimURI);
+        }
+        if (attributeName == null || attributeName.isEmpty()) {
+            attributeName = claimManager.getAttributeName(claimURI);
+        }
+
+        if (attributeName == null) {
+            if (UserCoreConstants.PROFILE_CONFIGURATION.equals(claimURI)) {
+                attributeName = claimURI;
+            } else if (DISAPLAY_NAME_CLAIM.equals(claimURI)) {
+                attributeName = this.realmConfig.getUserStoreProperty(LDAPConstants.DISPLAY_NAME_ATTRIBUTE);
+            } else {
+                throw new UserStoreException("Mapped attribute cannot be found for claim : " + claimURI + " in user " +
+                        "store : " + getMyDomainName());
+            }
+        }
+
+        return attributeName;
+    }
+
+
+    /**
+     * Prepare the batch
+     *
+     * @param prepStmt
+     * @param params
+     * @throws UserStoreException
+     */
+    private void batchUpdateStringValuesToDatabase(PreparedStatement prepStmt, Object... params) throws
+            UserStoreException {
+        try {
+            if (params != null && params.length > 0) {
+                for (int i = 0; i < params.length; i++) {
+                    Object param = params[i];
+                    if (param == null) {
+                        throw new UserStoreException("Invalid data provided");
+                    } else if (param instanceof String) {
+                        prepStmt.setString(i + 1, (String) param);
+                    } else if (param instanceof Integer) {
+                        prepStmt.setInt(i + 1, (Integer) param);
+                    } else if (param instanceof Date) {
+                        prepStmt.setTimestamp(i + 1, new Timestamp(System.currentTimeMillis()));
+                    } else if (param instanceof Boolean) {
+                        prepStmt.setBoolean(i + 1, (Boolean) param);
+                    }
+                }
+            }
+            prepStmt.addBatch();
+        } catch (SQLException e) {
+            String msg = "Error occurred while updating property values to database.";
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        }
+    }
+
+    /**
+     *
+     */
+    public boolean doCheckExistingUser(String userName) throws UserStoreException {
+
+        String sqlStmt;
+        if (isCaseSensitiveUsername()) {
+            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_IS_USER_EXISTING);
+        } else {
+            sqlStmt = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.GET_IS_USER_EXISTING_CASE_INSENSITIVE);
+        }
+        if (sqlStmt == null) {
+            throw new UserStoreException("The sql statement for is user existing null");
+        }
+        boolean isExisting = false;
+
+        String isUnique = realmConfig
+                .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_USERNAME_UNIQUE);
+        if (Boolean.parseBoolean(isUnique) && !UserCoreConstants.REGISTRY_ANONNYMOUS_USERNAME.equals(userName)) {
+            String uniquenesSql;
+            if (isCaseSensitiveUsername()) {
+                uniquenesSql = realmConfig.getUserStoreProperty(JDBCRealmConstants.USER_NAME_UNIQUE);
+            } else {
+                uniquenesSql = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.USER_NAME_UNIQUE_CASE_INSENSITIVE);
+            }
+            isExisting = isValueExisting(uniquenesSql, null, userName);
+            if (log.isDebugEnabled()) {
+                log.debug("The username should be unique across tenants.");
+            }
+        } else {
+            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                isExisting = isValueExisting(sqlStmt, null, userName, tenantId);
+            } else {
+                isExisting = isValueExisting(sqlStmt, null, userName);
+            }
+        }
+
+        return isExisting;
+    }
+
+    /**
+     * @param sqlStmt
+     * @param dbConnection
+     * @param params
+     * @return
+     * @throws UserStoreException
+     */
+    protected boolean isValueExisting(String sqlStmt, Connection dbConnection, Object... params)
+            throws UserStoreException {
+        PreparedStatement prepStmt = null;
+        ResultSet rs = null;
+        boolean isExisting = false;
+        boolean doClose = false;
+        try {
+            if (dbConnection == null) {
+                dbConnection = getDBConnection();
+                doClose = true; // because we created it
+            }
+            if (DatabaseUtil.getIntegerValueFromDatabase(dbConnection, sqlStmt, params) > -1) {
+                isExisting = true;
+            }
+            return isExisting;
+        } catch (SQLException e) {
+            String msg = "Error occurred while checking existence of values.";
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        } finally {
+            if (doClose) {
+                DatabaseUtil.closeAllConnections(dbConnection, rs, prepStmt);
+            }
+        }
+    }
+
+
+    /**
+     *
+     */
+    public boolean doCheckExistingRole(String roleName) throws UserStoreException {
+
+        RoleContext roleContext = createRoleContext(roleName);  // TODO if role Name with Shared Role?
+        return isExistingJDBCRole(roleContext);
+    }
+
+    protected boolean isExistingJDBCRole(RoleContext context) throws UserStoreException {
+
+        boolean isExisting;
+        String roleName = context.getRoleName();
+
+        String sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_IS_ROLE_EXISTING);
+        if (sqlStmt == null) {
+            throw new UserStoreException("The sql statement for is role existing role null");
+        }
+
+        if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+            isExisting =
+                    isValueExisting(sqlStmt, null, roleName, ((JDBCRoleContext) context).getTenantId());
+        } else {
+            isExisting = isValueExisting(sqlStmt, null, roleName);
+        }
+
+        return isExisting;
     }
 }
 
