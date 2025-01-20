@@ -30,6 +30,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
 
 import org.jetbrains.annotations.NotNull;
+import org.json.JSONObject;
 import org.wso2.dashboard.security.user.core.UserStore;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
@@ -47,6 +48,7 @@ import org.wso2.ei.dashboard.core.rest.model.UsersInner;
 import org.wso2.ei.dashboard.core.rest.model.UsersResourceResponse;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
+import org.wso2.micro.core.util.AuditLogger;
 import org.wso2.micro.integrator.security.user.api.UserStoreException;
 import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
@@ -56,14 +58,9 @@ import java.net.URLEncoder;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Objects;
 
-import static org.wso2.ei.dashboard.core.commons.Constants.DOMAIN_SEPARATOR;
-import static org.wso2.ei.dashboard.core.commons.Constants.FAIL_STATUS;
-import static org.wso2.ei.dashboard.core.commons.Constants.IS_ADMIN;
-import static org.wso2.ei.dashboard.core.commons.Constants.ROLES;
-import static org.wso2.ei.dashboard.core.commons.Constants.SUCCESS_STATUS;
-import static org.wso2.ei.dashboard.core.commons.Constants.USERS;
-import static org.wso2.ei.dashboard.core.commons.Constants.USER_ID;
+import static org.wso2.ei.dashboard.core.commons.Constants.*;
 
 // TODO: sabthar, User an asbstract class and 2 sub class for MI and ICP user delegation
 /**
@@ -196,6 +193,7 @@ public class UsersDelegate {
         CloseableHttpResponse response = null;
         try {
             response = Utils.doPatch(groupId, nodeId, accessToken, url, payload);
+            // TODO: sabthar, this logic seems wrong
             ack.setStatus(SUCCESS_STATUS);
         } finally {
             if (response != null) {
@@ -238,6 +236,41 @@ public class UsersDelegate {
             throw new ManagementApiException("Error while deleting user", 500);
         }
     }
+
+
+    public Ack deleteUserIcp(String userId, String domain) throws UserStoreException {
+        if (log.isDebugEnabled()) {
+            log.debug("Request received to delete the user: " + userId);
+        }
+        // TODO: sabthar, set the performed by user from request context. This need to set from security handler/Authentication filter
+        String performedBy = null;
+        if (Objects.isNull(performedBy)) {
+            log.warn(
+                    "Deleting a user without authenticating/authorizing the request sender. Adding "
+                            + "authentication and authorization handlers is recommended.");
+        } else {
+            if (performedBy.equals(userId)) {
+                throw new IllegalArgumentException(
+                        "Attempt to delete the logged in user. Operation not allowed. Please login "
+                                + "from another user.");
+            }
+        }
+        UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
+        String[] roles = userStoreManager.getRoleListOfUser(userId);
+
+        // TODO: sabthar, revisit this logic. This should be read from config
+//        if (ADMIN.equals(performedBy)) {
+//            userStoreManager.deleteUser(user);
+//        } else
+        if (!Arrays.asList(roles).contains(ADMIN)) {
+            userStoreManager.deleteUser(userId);
+        } else {
+            log.error("Only super admin user can delete admins");
+            throw new UserStoreException("Only super admin user can delete admins");
+        }
+        return new Ack(SUCCESS_STATUS);
+    }
+
 
     private JsonObject createAddUserPayload(AddUserRequest request) {
         JsonObject payload = new JsonObject();

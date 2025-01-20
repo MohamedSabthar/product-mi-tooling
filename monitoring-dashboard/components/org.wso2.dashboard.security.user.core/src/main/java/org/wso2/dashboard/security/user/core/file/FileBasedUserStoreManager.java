@@ -270,17 +270,17 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
+    protected void doDeleteUser(String userName) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void updateCredential(String s, Object o, Object o1) throws UserStoreException {
 
     }
 
     @Override
     public void updateCredentialByAdmin(String s, Object o) throws UserStoreException {
-
-    }
-
-    @Override
-    public void deleteUser(String s) throws UserStoreException {
 
     }
 

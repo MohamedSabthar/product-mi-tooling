@@ -1189,8 +1189,8 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void deleteUser(String s) throws UserStoreException {
-
+    protected void doDeleteUser(String userName) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
 
     @Override

@@ -555,4 +555,45 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      */
     protected abstract boolean doCheckExistingRole(String roleName) throws UserStoreException;
 
+
+    /**
+     * {@inheritDoc}
+     */
+    public final void deleteUser(String userName) throws UserStoreException {
+        // #################### Domain Name Free Zone Starts Here ################################
+
+        // TODO: sabthar, check this logic
+//        if (UserCoreUtil.isPrimaryAdminUser(userName, realmConfig)) {
+//            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DELETE_ADMIN_USER.toString());
+//        }
+
+        if (UserCoreUtil.isRegistryAnnonymousUser(userName)) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DELETE_ANONYMOUS_USER.toString());
+        }
+
+        if (isReadOnly()) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+        }
+
+        if (!doCheckExistingUser(userName)) {
+            String errorMessage = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getMessage(), userName,
+                    realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME));
+            String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getCode();
+            throw new UserStoreException(errorCode + " - " + errorMessage);
+        }
+
+        // Remove users from internal role mapping
+//        hybridRoleManager.deleteUser(UserCoreUtil.addDomainToName(userName, getMyDomainName()));
+        // TODO: sabthar, check the above logic
+
+        doDeleteUser(userName);
+    }
+
+    /**
+     * Delete the user with the given user name
+     *
+     * @param userName The user name
+     * @throws UserStoreException An unexpected exception has occurred
+     */
+    protected abstract void doDeleteUser(String userName) throws UserStoreException;
 }

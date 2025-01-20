@@ -96,6 +96,8 @@ public class AuthenticationFilter implements ContainerRequestFilter {
             // if the 'makeNonAdminUsersReadOnly' is set to 'true'
             abortWithUnauthorized(requestContext);
         }
+        // TODO: sabthar, set userid here and use the user id when there is delete request of the user for auditing purposes
+        // Update each security handler to obtain user id from token
     }
 
     private static boolean isAdminResource(ContainerRequestContext requestContext) {

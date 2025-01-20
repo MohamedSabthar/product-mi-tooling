@@ -28,6 +28,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.tools.ant.taskdefs.condition.Http;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.exception.ManagementApiException;
 import org.wso2.ei.dashboard.core.rest.annotation.Secured;
@@ -109,14 +110,14 @@ public class GroupsApi {
 
     @POST
     @Path("/{group-id}/log-configs")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Add logger", description = "", tags={ "logConfigs" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "Logger insert status",
-                     content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Add logger", description = "", tags = {"logConfigs"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Logger insert status",
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response addLogger(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
@@ -130,14 +131,14 @@ public class GroupsApi {
 
     @PATCH
     @Path("/{group-id}/log-configs")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update log level", description = "", tags={ "logConfigs" })
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update log level", description = "", tags = {"logConfigs"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Logger update status",
-                         content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
             @ApiResponse(responseCode = "200", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))})
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response updateLogLevel(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid LogConfigUpdateRequest request) throws ManagementApiException {
@@ -150,33 +151,37 @@ public class GroupsApi {
 
     @POST
     @Path("/{group-id}/users")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Add user", description = "", tags={ "Users" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "User insert status", content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Add user", description = "", tags = {"Users"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "User insert status", content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response addUser(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid AddUserRequest request) throws ManagementApiException {
         UsersDelegate usersDelegate = new UsersDelegate();
-        Ack ack = null;
+
         try {
-            ack = usersDelegate.addUserIcp(request);
+            Ack ack = usersDelegate.addUserIcp(request);
+            Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
         } catch (UserStoreException e) {
-            throw new RuntimeException(e);
+            Ack ack = new Ack("400");
+            ack.message(e.getMessage());
+            Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
         }
-        Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
-        HttpUtils.setHeaders(responseBuilder);
-        return responseBuilder.build();
     }
 
     @PATCH
     @Path("/{group-id}/user/password")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Change user password", description = "", tags = { "Password" })
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Change user password", description = "", tags = {"Password"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Password update status",
                     content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
@@ -196,34 +201,50 @@ public class GroupsApi {
 
     @DELETE
     @Path("/{group-id}/users/{user-id}")
-    @Produces({ "application/json" })
-    @Operation(summary = "Delete user", description = "", tags={ "Users" })
+    @Produces({"application/json"})
+    @Operation(summary = "Delete user", description = "", tags = {"Users"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "User deletion status",
-                         content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
             @ApiResponse(responseCode = "200", description = "Unexpected error", content =
             @Content(schema = @Schema(implementation = Error.class)))
-    }) public Response deleteUser(
+    })
+    public Response deleteUser(
             @PathParam("group-id") @Parameter(description = "Group ID") String groupId,
             @PathParam("user-id") @Parameter(description = "User ID") String userId,
-            @QueryParam("domain") @Parameter(description = "domain name")  String domain) throws ManagementApiException {
+            @QueryParam("domain") @Parameter(description = "domain name") String domain) throws ManagementApiException {
         UsersDelegate usersDelegate = new UsersDelegate();
-        Ack ack = usersDelegate.deleteUser(groupId, userId, domain);
-        Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
-        HttpUtils.setHeaders(responseBuilder);
-        return responseBuilder.build();
+        Ack ack = null;
+        try {
+            ack = usersDelegate.deleteUserIcp(userId, domain);
+            Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        } catch (UserStoreException e) {
+            ack = new Ack("500");
+            Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        } catch (IllegalArgumentException e) {
+            ack = new Ack("403");
+            ack.setMessage(e.getMessage());
+            Response.ResponseBuilder responseBuilder = Response.status(Response.Status.FORBIDDEN).entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        }
     }
 
     @GET
     @Path("/{group-id}/nodes/{node-id}/logs/{file-name}")
-    @Produces({ "text/plain" })
-    @Operation(summary = "Get log content", description = "", tags={ "logFiles" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "Get log file content.",
-                     content = @Content(schema = @Schema(implementation = File.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
-    }) public Response getLogContent(
+    @Produces({"text/plain"})
+    @Operation(summary = "Get log content", description = "", tags = {"logFiles"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Get log file content.",
+                    content = @Content(schema = @Schema(implementation = File.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
+    })
+    public Response getLogContent(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @PathParam("node-id") @Parameter(description = "Node id of the file") String nodeId,
             @PathParam("file-name") @Parameter(description = "Log file name") String fileName) throws ManagementApiException {
@@ -236,22 +257,22 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/apis")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get APIs by node ids", description = "", tags={ "apis" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of APIs deployed in provided nodes", content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get APIs by node ids", description = "", tags = {"apis"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of APIs deployed in provided nodes", content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getApisByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         ApisDelegate apisDelegate = new ApisDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -268,24 +289,24 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/capps")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get carbon applications by node ids", description = "", tags={ "carbonApplications" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of carbon applications deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get carbon applications by node ids", description = "", tags = {"carbonApplications"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of carbon applications deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getCarbonApplicationsByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         CarbonAppsDelegate cappsDelegate = new CarbonAppsDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -302,15 +323,15 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/nodes/{node-id}/capps/{capp-name}/artifacts")
-    @Produces({ "application/json" })
+    @Produces({"application/json"})
     @Operation(summary = "Get artifact list of carbon application by node id", description = "",
-               tags={ "carbonApplications" })
+            tags = {"carbonApplications"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200",
-                         description = "List of artifacts in carbon applications deployed in provided nodes",
-                         content = @Content(schema = @Schema(implementation = CAppArtifacts.class))),
+                    description = "List of artifacts in carbon applications deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = CAppArtifacts.class))),
             @ApiResponse(responseCode = "200", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getCarbonApplicationArtifactsByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
@@ -326,25 +347,25 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/connectors")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get connectors by node ids", description = "", tags={ "connectors" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of connectors deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get connectors by node ids", description = "", tags = {"connectors"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of connectors deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getConnectorsByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
-        
+    ) {
+
         ConnectorsDelegate connectorsDelegate = new ConnectorsDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Connectors");
@@ -360,23 +381,23 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/data-services")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get data-services by node ids", description = "", tags={ "data-services" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of data-services deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Produces({"application/json"})
+    @Operation(summary = "Get data-services by node ids", description = "", tags = {"data-services"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of data-services deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response getDataServicesByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
         DataServicesDelegate dataServicesDelegate = new DataServicesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Data Services");
@@ -392,23 +413,23 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/datasources")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get datasources by node ids", description = "", tags={ "datasources" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of datsources deployed in provided nodes", content = @Content(schema = @Schema(implementation = DatasourceList.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get datasources by node ids", description = "", tags = {"datasources"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of datsources deployed in provided nodes", content = @Content(schema = @Schema(implementation = DatasourceList.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getDatasourcesByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
-        
+    ) {
+
         DataSourcesDelegate dataSourcesDelegate = new DataSourcesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Data Sources");
@@ -424,24 +445,24 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/endpoints")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get endpoints by node ids", description = "", tags={ "endpoints" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of endpoints deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get endpoints by node ids", description = "", tags = {"endpoints"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of endpoints deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getEndpointsByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         EndpointsDelegate endpointsDelegate = new EndpointsDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -458,8 +479,8 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/services")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get services by node ids", description = "", tags={ "services" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get services by node ids", description = "", tags = {"services"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List of services deployed in provided nodes",
                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
@@ -468,10 +489,10 @@ public class GroupsApi {
     })
     public Response getServicesByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
@@ -492,8 +513,8 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/listeners")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get listeners by node ids", description = "", tags={ "services" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get listeners by node ids", description = "", tags = {"services"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List of listeners deployed in provided nodes",
                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
@@ -502,16 +523,16 @@ public class GroupsApi {
     })
     public Response getListenersByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
     ) {
 
-            ListenersDelegate listenersDelegate = new ListenersDelegate();
+        ListenersDelegate listenersDelegate = new ListenersDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get services");
         try {
@@ -526,24 +547,24 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/inbound-endpoints")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get inbound endpoints by node ids", description = "", tags={ "inboundEndpoints" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of inbound endpoints deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get inbound endpoints by node ids", description = "", tags = {"inboundEndpoints"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of inbound endpoints deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getInboundEpsByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         InboundEndpointDelegate inboundEndpointDelegate = new InboundEndpointDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -560,23 +581,23 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/local-entries")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get local entries by node ids", description = "", tags={ "localEntries" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of local entries deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Produces({"application/json"})
+    @Operation(summary = "Get local entries by node ids", description = "", tags = {"localEntries"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of local entries deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response getLocalEntriesByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         LocalEntriesDelegate localEntriesDelegate = new LocalEntriesDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -593,13 +614,13 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/nodes/{node-id}/local-entries/{local-entry}/value")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get value of local entry", description = "", tags={ "localEntries" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get value of local entry", description = "", tags = {"localEntries"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Value of the local entry",
-                         content = @Content(schema = @Schema(implementation = LocalEntryValue.class))),
+                    content = @Content(schema = @Schema(implementation = LocalEntryValue.class))),
             @ApiResponse(responseCode = "200", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))})
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response getLocalEntryValue(
             @PathParam("group-id") @Parameter(description = "Group id of the node") String groupId,
             @PathParam("node-id") @Parameter(description = "Node id") String nodeId,
@@ -614,23 +635,24 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/log-configs")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get log configs", description = "", tags={ "logConfigs" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of log configs",
-                     content = @Content(schema = @Schema(implementation = LogConfigsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
-    }) public Response getLogConfigs(
+    @Produces({"application/json"})
+    @Operation(summary = "Get log configs", description = "", tags = {"logConfigs"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of log configs",
+                    content = @Content(schema = @Schema(implementation = LogConfigsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
+    })
+    public Response getLogConfigs(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         LogConfigDelegate logConfigDelegate = new LogConfigDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -647,15 +669,16 @@ public class GroupsApi {
 
     @PATCH
     @Path("/{group-id}/log-configs/nodes/{node-id}")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update log level by nodeId", description = "", tags={ "logConfigs" })
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update log level by nodeId", description = "", tags = {"logConfigs"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Logger update status",
-                         content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
             @ApiResponse(responseCode = "200", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))
-    }) public Response updateLogLevelByNodeId(
+                    content = @Content(schema = @Schema(implementation = Error.class)))
+    })
+    public Response updateLogLevelByNodeId(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @PathParam("node-id") @Parameter(description = "NodeId") String nodeId,
             @Valid LogConfigUpdateRequest request) throws ManagementApiException {
@@ -666,23 +689,23 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/logs")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get log files by node ids", description = "", tags={ "logFiles" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of log files of provided nodes",
-                     content = @Content(schema = @Schema(implementation = LogsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Produces({"application/json"})
+    @Operation(summary = "Get log files by node ids", description = "", tags = {"logFiles"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of log files of provided nodes",
+                    content = @Content(schema = @Schema(implementation = LogsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response getLogFilesByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         LogsDelegate logsDelegate = new LogsDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -699,23 +722,23 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/message-processors")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get message processors by node ids", description = "", tags={ "messageProcessors" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of message processorss deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Produces({"application/json"})
+    @Operation(summary = "Get message processors by node ids", description = "", tags = {"messageProcessors"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of message processorss deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response getMessageProcessorsByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         MessageProcessorsDelegate messageProcessorsDelegate = new MessageProcessorsDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -732,24 +755,24 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/message-stores")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get message stores by node ids", description = "", tags={ "messageStores" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of message stores deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "500", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get message stores by node ids", description = "", tags = {"messageStores"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of message stores deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getMessageStoresByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         MessageStoresDelegate messageStoresDelegate = new MessageStoresDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -766,24 +789,24 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/proxy-services")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get proxy services by node ids", description = "", tags={ "proxyServices" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of proxy services deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get proxy services by node ids", description = "", tags = {"proxyServices"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of proxy services deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getProxyServicesByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-            ) {
+    ) {
 
         ProxyServiceDelegate proxyServiceDelegate = new ProxyServiceDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -800,17 +823,17 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/registry-resources/properties")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get registry resource content", description = "", tags={ "registryResources" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get registry resource content", description = "", tags = {"registryResources"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Get registry resource file content", content = @Content(schema = @Schema(implementation = RegistryArtifacts.class))),
             @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getRegistryResourceProperties(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @QueryParam("path") @Parameter(description = "Path of the registry")  String path) throws ManagementApiException {
+            @QueryParam("path") @Parameter(description = "Path of the registry") String path) throws ManagementApiException {
         RegistryResourceDelegate registryResourceDelegate = new RegistryResourceDelegate();
-        List<RegistryProperty> registryContent = registryResourceDelegate.getRegistryProperties(groupId,path);
+        List<RegistryProperty> registryContent = registryResourceDelegate.getRegistryProperties(groupId, path);
         Response.ResponseBuilder responseBuilder = Response.ok().entity(registryContent);
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();
@@ -818,28 +841,28 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/registry-resources")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get registryResources services", description = "", tags={ "registryResources" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get registryResources services", description = "", tags = {"registryResources"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List of registry resources deployed in provided nodes", content = @Content(schema = @Schema(implementation = RegistryResourceResponse.class))),
             @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getRegistryResources(
-        @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-        @NotNull @QueryParam("path") @Parameter(description = "Path of the registry")  String path,
-        @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-        @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-        @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
-        @QueryParam("order") @Parameter(description = "Order") String order,
-        @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy) {
-        
+            @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
+            @NotNull @QueryParam("path") @Parameter(description = "Path of the registry") String path,
+            @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
+            @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @QueryParam("order") @Parameter(description = "Order") String order,
+            @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy) {
+
         RegistryResourceDelegate registryResourceDelegate = new RegistryResourceDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Registry Resources");
-        try{
+        try {
             RegistryResourceResponse registryArtifacts = registryResourceDelegate.getPaginatedRegistryResponse(groupId, searchKey, lowerLimit, upperLimit, order, orderBy, path);
             responseBuilder = Response.ok().entity(registryArtifacts);
-        } catch(ManagementApiException e) {
+        } catch (ManagementApiException e) {
             responseBuilder = Response.status(e.getErrorCode()).entity(getError(e));
         }
         HttpUtils.setHeaders(responseBuilder);
@@ -848,17 +871,17 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/registry-resources/content")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get registry resource content", description = "", tags={ "registryResources" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get registry resource content", description = "", tags = {"registryResources"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Get registry resource file content", content = @Content(schema = @Schema(implementation = RegistryArtifacts.class))),
             @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getRegistryResourceContent(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @QueryParam("path") @Parameter(description = "Path of the registry")  String path) throws ManagementApiException {
+            @QueryParam("path") @Parameter(description = "Path of the registry") String path) throws ManagementApiException {
         RegistryResourceDelegate registryResourceDelegate = new RegistryResourceDelegate();
-        String registryContent = registryResourceDelegate.getRegistryContent(groupId,path);
+        String registryContent = registryResourceDelegate.getRegistryContent(groupId, path);
         Response.ResponseBuilder responseBuilder = Response.ok().entity(registryContent);
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();
@@ -866,23 +889,24 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/sequences")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get sequences by node ids", description = "", tags={ "sequences" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of sequences deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
-    }) public Response getSequencesByNodeIds(
+    @Produces({"application/json"})
+    @Operation(summary = "Get sequences by node ids", description = "", tags = {"sequences"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of sequences deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
+    })
+    public Response getSequencesByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
         SequencesDelegate sequencesDelegate = new SequencesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Sequences");
@@ -898,23 +922,23 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/tasks")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get tasks by node ids", description = "", tags={ "tasks" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of tasks deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Produces({"application/json"})
+    @Operation(summary = "Get tasks by node ids", description = "", tags = {"tasks"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of tasks deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response getTasksByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         TasksDelegate tasksDelegate = new TasksDelegate();
         Response.ResponseBuilder responseBuilder;
@@ -931,30 +955,30 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/templates")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get templates by node ids", description = "", tags={ "templates" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of templates deployed in provided nodes",
-                     content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get templates by node ids", description = "", tags = {"templates"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of templates deployed in provided nodes",
+                    content = @Content(schema = @Schema(implementation = ArtifactsResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getTemplatesByNodeIds(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @NotNull  @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes")  List<String> nodes,
+            @NotNull @QueryParam("nodes") @Parameter(description = "ID/IDs of the nodes") List<String> nodes,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
-            @NotNull  @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @NotNull  @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
+            @NotNull @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
+            @NotNull @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate
-        ) {
+    ) {
 
         TemplatesDelegate templatesDelegate = new TemplatesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Templates");
         try {
-            ArtifactsResourceResponse templateList =templatesDelegate.getPaginatedArtifactsResponse(groupId, nodes, searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
+            ArtifactsResourceResponse templateList = templatesDelegate.getPaginatedArtifactsResponse(groupId, nodes, searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
             responseBuilder = Response.ok().entity(templateList);
         } catch (ManagementApiException e) {
             responseBuilder = Response.status(e.getErrorCode()).entity(getError(e));
@@ -965,13 +989,13 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/users")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get users", description = "", tags={ "Users" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "List of users",
-                     content = @Content(schema = @Schema(implementation = UsersResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Produces({"application/json"})
+    @Operation(summary = "Get users", description = "", tags = {"Users"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List of users",
+                    content = @Content(schema = @Schema(implementation = UsersResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Response getUsers(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @QueryParam("searchKey") @Parameter(description = "Search key") String searchKey,
@@ -979,9 +1003,8 @@ public class GroupsApi {
             @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
-            @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate) 
-            {
-        
+            @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate) {
+
         UsersDelegate usersDelegate = new UsersDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Users");
@@ -997,17 +1020,17 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/all-roles")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get roles", description = "", tags={ "Roles" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get roles", description = "", tags = {"Roles"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List of roles",
-                         content = @Content(schema = @Schema(implementation = RolesResourceResponse.class))),
+                    content = @Content(schema = @Schema(implementation = RolesResourceResponse.class))),
             @ApiResponse(responseCode = "500", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getRoles(
             @PathParam("group-id") @Parameter(description = "Group ID") String groupId) {
-        
+
         RolesDelegate rolesDelegate = new RolesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get All Roles");
@@ -1023,13 +1046,13 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/roles")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get roles", description = "", tags={ "Roles" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get roles", description = "", tags = {"Roles"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List of roles",
-                         content = @Content(schema = @Schema(implementation = RolesResourceResponse.class))),
+                    content = @Content(schema = @Schema(implementation = RolesResourceResponse.class))),
             @ApiResponse(responseCode = "500", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response getRoles(
             @PathParam("group-id") @Parameter(description = "Group ID") String groupId,
@@ -1038,9 +1061,8 @@ public class GroupsApi {
             @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit,
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
-            @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate) 
-            {
-        
+            @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate) {
+
         RolesDelegate rolesDelegate = new RolesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Roles");
@@ -1056,15 +1078,16 @@ public class GroupsApi {
 
     @POST
     @Path("/{group-id}/roles")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Add role", description = "", tags={ "Roles" })
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Add role", description = "", tags = {"Roles"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Role insert status",
-                         content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
             @ApiResponse(responseCode = "500", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))
-    }) public Response addRole(
+                    content = @Content(schema = @Schema(implementation = Error.class)))
+    })
+    public Response addRole(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid AddRoleRequest request) throws ManagementApiException {
         RolesDelegate rolesDelegate = new RolesDelegate();
@@ -1076,14 +1099,14 @@ public class GroupsApi {
 
     @PATCH
     @Path("/{group-id}/roles")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update role", description = "", tags={ "Roles" })
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update role", description = "", tags = {"Roles"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Role update status",
-                         content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
             @ApiResponse(responseCode = "500", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response updateRole(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
@@ -1097,19 +1120,19 @@ public class GroupsApi {
 
     @DELETE
     @Path("/{group-id}/roles/{role-name}")
-    @Produces({ "application/json" })
-    @Operation(summary = "Delete role", description = "", tags={ "Roles" })
+    @Produces({"application/json"})
+    @Operation(summary = "Delete role", description = "", tags = {"Roles"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Role deletion status",
-                         content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
             @ApiResponse(responseCode = "500", description = "Unexpected error",
-                         content = @Content(schema = @Schema(implementation = Error.class)))
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
 
     public Response deleteRole(
             @PathParam("group-id") @Parameter(description = "Group ID") String groupId,
             @PathParam("role-name") @Parameter(description = "Role Name") String roleName,
-            @QueryParam("domain") @Parameter(description = "domain name")  String domain)
+            @QueryParam("domain") @Parameter(description = "domain name") String domain)
             throws ManagementApiException {
         RolesDelegate rolesDelegate = new RolesDelegate();
         Ack ack = rolesDelegate.deleteRole(groupId, roleName, domain);
@@ -1119,11 +1142,11 @@ public class GroupsApi {
     }
 
     @GET
-    @Produces({ "application/json" })
-    @Operation(summary = "Get set of groups", description = "", tags={ "groups" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "The list of groups registered to dashboard", content = @Content(schema = @Schema(implementation = GroupList.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get set of groups", description = "", tags = {"groups"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "The list of groups registered to dashboard", content = @Content(schema = @Schema(implementation = GroupList.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error", content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response retrieveGroups() {
         GroupDelegate groupDelegate = new GroupDelegate();
@@ -1135,17 +1158,17 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/all-nodes")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get set of nodes in the group", description = "", tags={ "nodes" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "The list of nodes in group",
-                     content = @Content(schema = @Schema(implementation = NodeList.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get set of nodes in the group", description = "", tags = {"nodes"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "The list of nodes in group",
+                    content = @Content(schema = @Schema(implementation = NodeList.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response retrieveAllNodes(
-            @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId){
-        
+            @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId) {
+
         logger.debug("Invoking the Groups API to get All Nodes");
         NodesDelegate nodesDeligate = new NodesDelegate();
         NodeList nodesResponse = nodesDeligate.getNodes(groupId);
@@ -1156,8 +1179,8 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/nodes/{product-id}")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get all nodes in the group based on product", description = "", tags={ "nodes" })
+    @Produces({"application/json"})
+    @Operation(summary = "Get all nodes in the group based on product", description = "", tags = {"nodes"})
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "The list of nodes in group based on product",
                     content = @Content(schema = @Schema(implementation = NodeList.class))),
@@ -1177,18 +1200,18 @@ public class GroupsApi {
 
     @GET
     @Path("/{group-id}/nodes")
-    @Produces({ "application/json" })
-    @Operation(summary = "Get set of nodes in the group", description = "", tags={ "nodes" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "The list of nodes in group",
-                     content = @Content(schema = @Schema(implementation = NodesResourceResponse.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Produces({"application/json"})
+    @Operation(summary = "Get set of nodes in the group", description = "", tags = {"nodes"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "The list of nodes in group",
+                    content = @Content(schema = @Schema(implementation = NodesResourceResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Response retrieveNodesByGroupId(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @QueryParam("lowerLimit") @Parameter(description = "Lower Limit") String lowerLimit,
-            @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit){
+            @QueryParam("upperLimit") @Parameter(description = "Upper Limit") String upperLimit) {
 
         logger.debug("Invoking the Groups API to get Nodes");
         NodesDelegate nodesDeligate = new NodesDelegate();
@@ -1200,30 +1223,31 @@ public class GroupsApi {
 
     @PATCH
     @Path("/{group-id}/apis")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update API", description = "", tags={ "apis" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "API update status",
-                     content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update API", description = "", tags = {"apis"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "API update status",
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Ack updateApi(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid ArtifactUpdateRequest request) throws ManagementApiException {
         ApisDelegate apisDelegate = new ApisDelegate();
         return apisDelegate.updateArtifact(groupId, request);
     }
+
     @PATCH
     @Path("/{group-id}/endpoints")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update endpoint", description = "", tags={ "endpoints" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "Endpoint update status",
-                     content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update endpoint", description = "", tags = {"endpoints"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Endpoint update status",
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Ack updateEndpoint(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
@@ -1231,32 +1255,34 @@ public class GroupsApi {
         EndpointsDelegate endpointsDelegate = new EndpointsDelegate();
         return endpointsDelegate.updateArtifact(groupId, request);
     }
+
     @PATCH
     @Path("/{group-id}/inbound-endpoints")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update inbound endpoint", description = "", tags={ "inboundEndpoints" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "Inbound endpoint update status",
-                     content = @Content(schema = @Schema(implementation = Ack.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update inbound endpoint", description = "", tags = {"inboundEndpoints"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Inbound endpoint update status",
+                    content = @Content(schema = @Schema(implementation = Ack.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Ack updateInboundEp(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid ArtifactUpdateRequest request) throws ManagementApiException {
         InboundEndpointDelegate inboundEndpointDelegate = new InboundEndpointDelegate();
         return inboundEndpointDelegate.updateArtifact(groupId, request);
     }
+
     @PATCH
     @Path("/{group-id}/message-processors")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update message processor", description = "", tags={ "messageProcessors" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "Message processor update status",
-                     content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update message processor", description = "", tags = {"messageProcessors"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Message processor update status",
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Ack updateMessageProcessor(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid ArtifactUpdateRequest request) throws ManagementApiException {
@@ -1264,16 +1290,17 @@ public class GroupsApi {
         MessageProcessorsDelegate messageProcessorsDelegate = new MessageProcessorsDelegate();
         return messageProcessorsDelegate.updateArtifact(groupId, request);
     }
+
     @PATCH
     @Path("/{group-id}/proxy-services")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update proxy service", description = "", tags={ "proxyServices" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "Proxy update status",
-                     content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update proxy service", description = "", tags = {"proxyServices"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Proxy update status",
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))
     })
     public Ack updateProxyService(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
@@ -1281,16 +1308,17 @@ public class GroupsApi {
         ProxyServiceDelegate proxyServiceDelegate = new ProxyServiceDelegate();
         return proxyServiceDelegate.updateArtifact(groupId, request);
     }
+
     @PATCH
     @Path("/{group-id}/sequences")
-    @Consumes({ "application/json" })
-    @Produces({ "application/json" })
-    @Operation(summary = "Update sequence", description = "", tags={ "sequences" })
-    @ApiResponses(value = { 
-        @ApiResponse(responseCode = "200", description = "Sequence update status",
-                     content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
-        @ApiResponse(responseCode = "200", description = "Unexpected error",
-                     content = @Content(schema = @Schema(implementation = Error.class)))})
+    @Consumes({"application/json"})
+    @Produces({"application/json"})
+    @Operation(summary = "Update sequence", description = "", tags = {"sequences"})
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Sequence update status",
+                    content = @Content(schema = @Schema(implementation = SuccessStatus.class))),
+            @ApiResponse(responseCode = "200", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = Error.class)))})
     public Ack updateSequence(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid ArtifactUpdateRequest request) throws ManagementApiException {

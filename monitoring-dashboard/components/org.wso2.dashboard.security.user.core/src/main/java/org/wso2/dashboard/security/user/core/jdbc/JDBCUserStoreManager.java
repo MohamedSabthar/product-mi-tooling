@@ -31,22 +31,13 @@ import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.core.*;
 import org.wso2.micro.integrator.security.user.core.claim.Claim;
 import org.wso2.micro.integrator.security.user.core.claim.ClaimManager;
-import org.wso2.micro.integrator.security.user.core.claim.ClaimMapping;
 import org.wso2.micro.integrator.security.user.core.common.RoleContext;
-import org.wso2.micro.integrator.security.user.core.common.UserStore;
-import org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants;
-import org.wso2.micro.integrator.security.user.core.internal.UMListenerServiceComponent;
 import org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants;
 import org.wso2.micro.integrator.security.user.core.jdbc.JDBCRoleContext;
 import org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants;
 import org.wso2.micro.integrator.security.user.core.ldap.LDAPConstants;
-import org.wso2.micro.integrator.security.user.core.listener.SecretHandleableListener;
-import org.wso2.micro.integrator.security.user.core.listener.UserOperationEventListener;
-import org.wso2.micro.integrator.security.user.core.listener.UserStoreManagerListener;
-import org.wso2.micro.integrator.security.user.core.multiplecredentials.UserAlreadyExistsException;
 import org.wso2.micro.integrator.security.user.core.tenant.Tenant;
 import org.wso2.micro.integrator.security.user.core.util.JDBCRealmUtil;
-import org.wso2.micro.integrator.security.user.core.util.UserCoreUtil;
 
 import javax.sql.DataSource;
 import java.security.MessageDigest;
@@ -525,9 +516,66 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
 
     }
 
-    @Override
-    public void deleteUser(String s) throws UserStoreException {
+    /**
+     *
+     */
+    public void doDeleteUser(String userName) throws UserStoreException {
+        String sqlStmt1;
+        if (isCaseSensitiveUsername()) {
+            sqlStmt1 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ON_DELETE_USER_REMOVE_USER_ROLE);
+        } else {
+            sqlStmt1 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
+                    .ON_DELETE_USER_REMOVE_USER_ROLE_CASE_INSENSITIVE);
+        }
+        if (sqlStmt1 == null) {
+            throw new UserStoreException("The sql statement for delete user-role mapping is null");
+        }
 
+        String sqlStmt2;
+        if (isCaseSensitiveUsername()) {
+            sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ON_DELETE_USER_REMOVE_ATTRIBUTE);
+        } else {
+            sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
+                    .ON_DELETE_USER_REMOVE_ATTRIBUTE_CASE_INSENSITIVE);
+        }
+        if (sqlStmt2 == null) {
+            throw new UserStoreException("The sql statement for delete user attribute is null");
+        }
+
+        String sqlStmt3;
+        if (isCaseSensitiveUsername()) {
+            sqlStmt3 = realmConfig.getUserStoreProperty(JDBCRealmConstants.DELETE_USER);
+        } else {
+            sqlStmt3 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.DELETE_USER_CASE_INSENSITIVE);
+        }
+        if (sqlStmt3 == null) {
+            throw new UserStoreException("The sql statement for delete user is null");
+        }
+
+        Connection dbConnection = null;
+        try {
+            dbConnection = getDBConnection();
+            if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, userName, tenantId,
+                        tenantId);
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt2, userName, tenantId,
+                        tenantId);
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt3, userName, tenantId);
+            } else {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, userName);
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt2, userName);
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt3, userName);
+            }
+            dbConnection.commit();
+        } catch (SQLException e) {
+            String msg = "Error occurred while deleting user : " + userName;
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        } finally {
+            DatabaseUtil.closeAllConnections(dbConnection);
+        }
     }
 
     @Override
