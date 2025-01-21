@@ -506,16 +506,6 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
 
     }
 
-    @Override
-    public void updateCredential(String s, Object o, Object o1) throws UserStoreException {
-
-    }
-
-    @Override
-    public void updateCredentialByAdmin(String s, Object o) throws UserStoreException {
-
-    }
-
     /**
      *
      */
@@ -576,6 +566,54 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         } finally {
             DatabaseUtil.closeAllConnections(dbConnection);
         }
+    }
+
+    /**
+     *
+     */
+    public void doUpdateCredentialByAdmin(String userName, Object newCredential)
+            throws UserStoreException {
+
+        String sqlStmt;
+        if (isCaseSensitiveUsername()) {
+            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.UPDATE_USER_PASSWORD);
+        } else {
+            sqlStmt = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.UPDATE_USER_PASSWORD_CASE_INSENSITIVE);
+        }
+        if (sqlStmt == null) {
+            throw new UserStoreException("The sql statement for delete user claim value is null");
+        }
+        String saltValue = null;
+        if ("true".equalsIgnoreCase(realmConfig.getUserStoreProperties().get(
+                JDBCRealmConstants.STORE_SALTED_PASSWORDS))) {
+            saltValue = generateSaltValue();
+        }
+
+        String password = this.preparePassword(newCredential, saltValue);
+
+        if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN) && saltValue == null) {
+            updateStringValuesToDatabase(null, sqlStmt, password, "", false, new Date(), userName,
+                    tenantId);
+        } else if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN) && saltValue != null) {
+            updateStringValuesToDatabase(null, sqlStmt, password, saltValue, false, new Date(),
+                    userName, tenantId);
+        } else if (!sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN) && saltValue == null) {
+            updateStringValuesToDatabase(null, sqlStmt, password, "", false, new Date(), userName);
+        } else {
+            updateStringValuesToDatabase(null, sqlStmt, password, saltValue, false, new Date(),
+                    userName);
+        }
+    }
+
+    public void doUpdateCredential(String userName, Object newCredential, Object oldCredential)
+            throws UserStoreException {
+        // no need to check old password here because we already authenticate in super class
+        // if (this.authenticate(userName, oldCredential)) {
+        this.doUpdateCredentialByAdmin(userName, newCredential);
+        /*
+         * } else { log.error("Wrong username/password provided"); throw new
+         * UserStoreException("Wrong username/password provided"); }
+         */
     }
 
     @Override

@@ -35,7 +35,6 @@ import org.wso2.micro.integrator.security.user.core.hybrid.HybridRoleManager;
 import org.wso2.micro.integrator.security.user.core.internal.UMListenerServiceComponent;
 import org.wso2.micro.integrator.security.user.core.listener.SecretHandleableListener;
 import org.wso2.micro.integrator.security.user.core.listener.UserOperationEventListener;
-import org.wso2.micro.integrator.security.user.core.listener.UserStoreManagerListener;
 import org.wso2.micro.integrator.security.user.core.multiplecredentials.UserAlreadyExistsException;
 import org.wso2.micro.integrator.security.user.core.system.SystemUserRoleManager;
 import org.wso2.micro.integrator.security.user.core.util.UserCoreUtil;
@@ -596,4 +595,153 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      * @throws UserStoreException An unexpected exception has occurred
      */
     protected abstract void doDeleteUser(String userName) throws UserStoreException;
+
+    /**
+     * {@inheritDoc}
+     */
+    public final void updateCredentialByAdmin(String userName, Object newCredential)
+            throws UserStoreException {
+
+        UserStore userStore = getUserStore(userName);
+
+        // #################### Domain Name Free Zone Starts Here ################################
+        if (isReadOnly()) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+        }
+
+        org.wso2.micro.integrator.security.util.Secret newCredentialObj;
+        try {
+            newCredentialObj = org.wso2.micro.integrator.security.util.Secret.getSecret(newCredential);
+        } catch (org.wso2.micro.integrator.security.UnsupportedSecretTypeException e) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString(), e);
+        }
+
+        try {
+
+            if (!checkUserPasswordValid(newCredential)) {
+//                    TODO: sabthar, check the below realm property
+//                String errorMsg = realmConfig.getUserStoreProperty(PROPERTY_PASSWORD_ERROR_MSG);
+                String errorMsg = "Invalid pattern in password";
+                if (errorMsg != null) {
+                    String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ERROR_DURING_PRE_UPDATE_CREDENTIAL_BY_ADMIN.getCode();
+                    String errorMessage = String
+                            .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ERROR_DURING_PRE_UPDATE_CREDENTIAL_BY_ADMIN.getMessage(),
+                                    errorMsg);
+                    throw new UserStoreException(errorCode + " - " + errorMessage);
+                }
+
+                String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getCode();
+                String errorMessage = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getMessage(),
+                        realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_JAVA_REG_EX));
+                throw new UserStoreException(errorCode + " - " + errorMessage);
+            }
+
+            if (!doCheckExistingUser(userStore.getDomainFreeName())) {
+                String errorMessage = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getMessage(), userName,
+                        realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME));
+                String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getCode();
+                throw new UserStoreException(errorCode + "-" + errorMessage);
+            }
+
+            try {
+                doUpdateCredentialByAdmin(userName, newCredentialObj);
+            } catch (UserStoreException ex) {
+                throw ex;
+            }
+        } finally {
+            newCredentialObj.clear();
+        }
+        // #################### </Listeners> #####################################################
+
+    }
+
+
+    /**
+     * {@inheritDoc}
+     */
+    public final void updateCredential(String userName, Object newCredential, Object oldCredential)
+            throws UserStoreException {
+
+        // #################### Domain Name Free Zone Starts Here ################################
+
+        if (isReadOnly()) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+        }
+
+       Secret newCredentialObj;
+        Secret oldCredentialObj;
+        try {
+            newCredentialObj = Secret.getSecret(newCredential);
+            oldCredentialObj =Secret.getSecret(oldCredential);
+        } catch (UnsupportedSecretTypeException e) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString());
+        }
+
+        // #################### <Listeners> #####################################################
+        try {
+
+            // This user name here is domain-less.
+            // We directly authenticate user against the selected UserStoreManager.
+            boolean isAuth = this.doAuthenticate(userName, oldCredentialObj);
+
+            if (isAuth) {
+                if (!checkUserPasswordValid(newCredential)) {
+//                    TODO: sabthar, check the below realm property
+//                    String errorMsg = realmConfig.getUserStoreProperty(PROPERTY_PASSWORD_ERROR_MSG);
+                    String errorMsg = "Invalid pattern in password";
+                    if (errorMsg != null) {
+                        String errorMessage = String
+                                .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ERROR_DURING_PRE_UPDATE_CREDENTIAL.getMessage(),
+                                        errorMsg);
+                        String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ERROR_DURING_PRE_UPDATE_CREDENTIAL.getCode();
+                        throw new UserStoreException(errorCode + " - " + errorMessage);
+                    }
+
+                    String errorMessage = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getMessage(),
+                            realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_JAVA_REG_EX));
+                    String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getCode();
+                    throw new UserStoreException(errorCode + " - " + errorMessage);
+                }
+
+                try {
+                    this.doUpdateCredential(userName, newCredentialObj, oldCredentialObj);
+                } catch (UserStoreException ex) {
+                    throw ex;
+                }
+
+
+
+            } else {
+                throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_OLD_CREDENTIAL_DOES_NOT_MATCH.toString());
+            }
+        } finally {
+            newCredentialObj.clear();
+            oldCredentialObj.clear();
+        }
+    }
+
+
+
+    /**
+     * Update credential/password by the admin of another user
+     *
+     * @param userName      The user name
+     * @param newCredential The new credential
+     * @throws UserStoreException An unexpected exception has occurred
+     */
+    protected abstract void doUpdateCredentialByAdmin(String userName, Object newCredential)
+            throws UserStoreException;
+
+    /**
+     * Update the credential/password of the user
+     *
+     * @param userName      The user name
+     * @param newCredential The new credential/password
+     * @param oldCredential The old credential/password
+     * @throws UserStoreException An unexpected exception has occurred
+     */
+    protected abstract void doUpdateCredential(String userName, Object newCredential,
+                                               Object oldCredential) throws UserStoreException;
+
+
 }

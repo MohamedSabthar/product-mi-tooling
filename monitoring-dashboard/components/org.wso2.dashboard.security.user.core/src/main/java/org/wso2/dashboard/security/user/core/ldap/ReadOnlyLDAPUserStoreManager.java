@@ -1179,12 +1179,13 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void updateCredential(String s, Object o, Object o1) throws UserStoreException {
+    protected void doUpdateCredentialByAdmin(String userName, Object newCredential) throws UserStoreException {
 
     }
 
     @Override
-    public void updateCredentialByAdmin(String s, Object o) throws UserStoreException {
+    protected void doUpdateCredential(String userName, Object newCredential, Object oldCredential) throws UserStoreException {
+        throw new UnsupportedOperationException();
 
     }
 

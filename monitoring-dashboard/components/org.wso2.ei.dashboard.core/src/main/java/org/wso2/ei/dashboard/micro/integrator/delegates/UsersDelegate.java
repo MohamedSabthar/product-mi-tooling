@@ -29,6 +29,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
 
+import org.apache.synapse.MessageContext;
+import org.apache.synapse.commons.json.JsonUtil;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONObject;
 import org.wso2.dashboard.security.user.core.UserStore;
@@ -205,6 +207,60 @@ public class UsersDelegate {
             }
         }
         return ack;
+    }
+
+    public Ack updateUserPasswordIcp(PasswordRequest request, String performedBy) throws UserStoreException {
+        String user = request.getUserId();
+        if (log.isDebugEnabled()) {
+            log.debug("Request received to update user credentials: " + user);
+        }
+        // TODO: sabthar, set the performed by user from request context. This need to set from security handler/Authentication filter
+//        String performedBy =  Utils.getStringPropertyFromMessageContext(messageContext, USERNAME_PROPERTY);
+        if (Objects.isNull(performedBy)) {
+            log.warn(
+                    "Update a user without authenticating/authorizing the request sender. Adding "
+                            + "authentication and authorization handlers is recommended.");
+        }
+        if (request.getNewPassword() != null && request.getConfirmPassword() != null) {
+            String newPassword = request.getNewPassword();
+            String confirmPassword = request.getConfirmPassword();
+            String oldPassword = request.getOldPassword();
+            if (newPassword.equals(confirmPassword)) {
+                UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
+                try {
+                    synchronized (this) {
+                        String[] userRoles = userStoreManager.getRoleListOfUser(user);
+                        String[] performerRoles = userStoreManager.getRoleListOfUser(performedBy);
+                        if (user.equals(performedBy)) {
+                            if (oldPassword == null) {
+                                throw new UserStoreException("The current user password cannot be null.");
+                            }
+                            userStoreManager.updateCredential(user, newPassword, oldPassword);
+                            // TODO: sabthar, this is wrong, instead of ADMIN need to obtain the value from super_admin.username
+                        } else if (ADMIN.equals(performedBy)) {
+                            userStoreManager.updateCredentialByAdmin(user, newPassword);
+                        } else if (Arrays.asList(performerRoles).contains(ADMIN) &&
+                                !Arrays.asList(userRoles).contains(ADMIN)) {
+                            userStoreManager.updateCredentialByAdmin(user, newPassword);
+                        } else if (Arrays.asList(performerRoles).contains(ADMIN) &&
+                                Arrays.asList(userRoles).contains(ADMIN)) {
+                            throw new UserStoreException(
+                                    "Only a super admin user can update the credentials of another admin.");
+                        } else {
+                            throw new UserStoreException("Only your own credentials can be updated by a user.");
+                        }
+                    }
+                } catch (UserStoreException e) {
+                    throw new UserStoreException("Failed to update user password. Please check the current " +
+                            "password entered and retry.", e);
+                }
+            } else {
+                throw new UserStoreException("New password and re-typed password does not match.");
+            }
+        } else {
+            throw new UserStoreException("New password or re-typed password is missing in the payload.");
+        }
+        return new Ack(SUCCESS_STATUS);
     }
 
     public Ack deleteUser(String groupId, String userId, String domain) throws ManagementApiException {

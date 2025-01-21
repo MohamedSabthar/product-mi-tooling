@@ -59,7 +59,7 @@ public class AuthenticationFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
-
+        String performedBy = null;
         String authorizationHeader = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
         Map<String, Cookie> cookies = requestContext.getCookies();
         String token;
@@ -73,6 +73,7 @@ public class AuthenticationFilter implements ContainerRequestFilter {
         } else if (isCookieBasedAuthentication(cookies)) {
             token = cookies.get(JWT_COOKIE).getValue();
             securityHandler = new InMemorySecurityHandler();
+            performedBy = TokenGenerator.extractSubject(token);
         } else {
             abortWithUnauthorized(requestContext);
             return;
@@ -98,6 +99,7 @@ public class AuthenticationFilter implements ContainerRequestFilter {
         }
         // TODO: sabthar, set userid here and use the user id when there is delete request of the user for auditing purposes
         // Update each security handler to obtain user id from token
+        requestContext.setProperty("performedBy", performedBy);
     }
 
     private static boolean isAdminResource(ContainerRequestContext requestContext) {

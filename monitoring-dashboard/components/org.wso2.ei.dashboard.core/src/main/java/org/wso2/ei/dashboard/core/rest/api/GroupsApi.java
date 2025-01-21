@@ -29,6 +29,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tools.ant.taskdefs.condition.Http;
+import org.wso2.ei.dashboard.core.commons.auth.TokenGenerator;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.exception.ManagementApiException;
 import org.wso2.ei.dashboard.core.rest.annotation.Secured;
@@ -69,6 +70,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.DELETE;
+import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.Response;
 
 import org.wso2.ei.dashboard.core.rest.model.UpdateRoleRequest;
@@ -192,7 +194,24 @@ public class GroupsApi {
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid PasswordRequest request, @CookieParam("JWT_TOKEN") String accessToken)
             throws ManagementApiException {
+        String perfomedBy = TokenGenerator.extractSubject(accessToken);
         UsersDelegate usersDelegate = new UsersDelegate();
+
+        // TODO: sabhtar, this is not the correct approach change this
+        if (perfomedBy != null) {
+            try {
+                Ack ack = usersDelegate.updateUserPasswordIcp(request, perfomedBy);
+                Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
+                HttpUtils.setHeaders(responseBuilder);
+                return responseBuilder.build();
+            } catch (UserStoreException e) {
+                Ack ack = new Ack("500");
+                ack.message(e.getMessage());
+                Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
+                HttpUtils.setHeaders(responseBuilder);
+                return responseBuilder.build();
+            }
+        }
         Ack ack = usersDelegate.updateUserPassword(groupId, request, accessToken);
         Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
         HttpUtils.setHeaders(responseBuilder);
@@ -1030,7 +1049,7 @@ public class GroupsApi {
     })
     public Response getRoles(
             @PathParam("group-id") @Parameter(description = "Group ID") String groupId) {
-
+//        TODO: sabthar, icp
         RolesDelegate rolesDelegate = new RolesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get All Roles");
@@ -1062,7 +1081,7 @@ public class GroupsApi {
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate) {
-
+//        TODO: sabthar, icp
         RolesDelegate rolesDelegate = new RolesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Roles");
@@ -1090,6 +1109,8 @@ public class GroupsApi {
     public Response addRole(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid AddRoleRequest request) throws ManagementApiException {
+//        TODO: sabthar, icp
+
         RolesDelegate rolesDelegate = new RolesDelegate();
         Ack ack = rolesDelegate.addRole(groupId, request);
         Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
@@ -1111,6 +1132,8 @@ public class GroupsApi {
     public Response updateRole(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid UpdateRoleRequest request) throws ManagementApiException {
+//        TODO: sabthar, icp
+
         RolesDelegate rolesDelegate = new RolesDelegate();
         Ack ack = rolesDelegate.updateRole(groupId, request);
         Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
@@ -1134,6 +1157,8 @@ public class GroupsApi {
             @PathParam("role-name") @Parameter(description = "Role Name") String roleName,
             @QueryParam("domain") @Parameter(description = "domain name") String domain)
             throws ManagementApiException {
+//        TODO: sabthar, icp
+
         RolesDelegate rolesDelegate = new RolesDelegate();
         Ack ack = rolesDelegate.deleteRole(groupId, roleName, domain);
         Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);

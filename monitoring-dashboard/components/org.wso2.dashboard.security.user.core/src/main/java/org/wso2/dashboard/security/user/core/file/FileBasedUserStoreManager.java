@@ -275,14 +275,15 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void updateCredential(String s, Object o, Object o1) throws UserStoreException {
-
+    protected void doUpdateCredentialByAdmin(String userName, Object newCredential) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public void updateCredentialByAdmin(String s, Object o) throws UserStoreException {
-
+    protected void doUpdateCredential(String userName, Object newCredential, Object oldCredential) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
+
 
     @Override
     public void addRole(String s, String[] strings, Permission[] permissions, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
