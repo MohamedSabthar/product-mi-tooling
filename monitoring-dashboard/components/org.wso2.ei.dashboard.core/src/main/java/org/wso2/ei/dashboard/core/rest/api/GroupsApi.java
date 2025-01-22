@@ -29,6 +29,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.tools.ant.taskdefs.condition.Http;
+import org.checkerframework.checker.units.qual.A;
 import org.wso2.ei.dashboard.core.commons.auth.TokenGenerator;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.exception.ManagementApiException;
@@ -71,6 +72,7 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.container.ContainerRequestContext;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 
 import org.wso2.ei.dashboard.core.rest.model.UpdateRoleRequest;
@@ -192,15 +194,16 @@ public class GroupsApi {
     })
     public Response updatePassword(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
-            @Valid PasswordRequest request, @CookieParam("JWT_TOKEN") String accessToken)
+            @Valid PasswordRequest request, @CookieParam("JWT_TOKEN") String accessToken,
+            @Context ContainerRequestContext requestContext)
             throws ManagementApiException {
-        String perfomedBy = TokenGenerator.extractSubject(accessToken);
+        String performedBy = (String) requestContext.getProperty("performedBy");
         UsersDelegate usersDelegate = new UsersDelegate();
 
         // TODO: sabhtar, this is not the correct approach change this
-        if (perfomedBy != null) {
+        if (performedBy != null) {
             try {
-                Ack ack = usersDelegate.updateUserPasswordIcp(request, perfomedBy);
+                Ack ack = usersDelegate.updateUserPasswordIcp(request, performedBy);
                 Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
                 HttpUtils.setHeaders(responseBuilder);
                 return responseBuilder.build();
@@ -1095,6 +1098,9 @@ public class GroupsApi {
         return responseBuilder.build();
     }
 
+    // TODO: sabthar, check whether these resources needs to be authorized only for admin
+    // TODO: sabthar, see Authentication filter there isAdminResource is used to authorized
+    // cross check all the resources are in the isAdminResource list
     @POST
     @Path("/{group-id}/roles")
     @Consumes({"application/json"})
@@ -1112,10 +1118,18 @@ public class GroupsApi {
 //        TODO: sabthar, icp
 
         RolesDelegate rolesDelegate = new RolesDelegate();
-        Ack ack = rolesDelegate.addRole(groupId, request);
-        Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
-        HttpUtils.setHeaders(responseBuilder);
-        return responseBuilder.build();
+        try {
+            Ack ack = rolesDelegate.addRoleIcp(request);
+            Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        } catch (UserStoreException e) {
+            Ack ack = new Ack("500");
+            ack.message(e.getMessage());
+            Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        }
     }
 
     @PATCH

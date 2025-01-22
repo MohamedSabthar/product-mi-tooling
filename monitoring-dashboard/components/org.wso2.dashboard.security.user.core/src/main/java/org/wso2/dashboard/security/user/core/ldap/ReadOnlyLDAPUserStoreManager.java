@@ -1200,6 +1200,11 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
+    protected void doAddRole(String roleName, String[] userList, boolean shared) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void addRole(String s, String[] strings, Permission[] permissions) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
 
     }

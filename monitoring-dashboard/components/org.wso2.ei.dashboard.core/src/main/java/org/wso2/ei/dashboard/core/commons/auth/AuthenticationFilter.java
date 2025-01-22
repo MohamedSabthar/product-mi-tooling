@@ -50,6 +50,7 @@ import static org.wso2.ei.dashboard.core.commons.Constants.JWT_COOKIE;
 public class AuthenticationFilter implements ContainerRequestFilter {
 
     private static final String AUTHENTICATION_SCHEME = "Bearer";
+    // TODO: sabthar, here I think we also need to add the roles section
     private static final List<String> adminOnlyPaths = Arrays.asList("/log-configs",
                                                                      "/users");
     private static final String MAKE_NON_ADMIN_USERS_READ_ONLY = "make_non_admin_users_read_only";
@@ -88,6 +89,7 @@ public class AuthenticationFilter implements ContainerRequestFilter {
         if (!securityHandler.isAuthenticated(config, token)) {
             abortWithUnauthorized(requestContext);
         }
+
 
         if (isAdminResource(requestContext) && !securityHandler.isAuthorized(config, token)) {
             abortWithUnauthorized(requestContext);

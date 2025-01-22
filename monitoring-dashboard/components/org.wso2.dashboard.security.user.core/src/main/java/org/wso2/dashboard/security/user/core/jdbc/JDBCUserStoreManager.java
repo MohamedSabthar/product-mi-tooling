@@ -24,6 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.dashboard.security.user.core.*;
 import org.wso2.dashboard.security.user.core.common.*;
+import org.wso2.micro.core.Constants;
 import org.wso2.micro.core.util.DatabaseCreator;
 import org.wso2.micro.integrator.security.user.api.Permission;
 import org.wso2.micro.integrator.security.user.api.Properties;
@@ -51,8 +52,7 @@ import static org.apache.axis2.clustering.ClusteringConstants.Parameters.APPLICA
 import static org.wso2.carbon.user.core.UserCoreConstants.WORKFLOW_DOMAIN;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.READ_GROUPS_ENABLED;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.WRITE_GROUPS_ENABLED;
-import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DUPLICATE_WHILE_ADDING_A_USER;
-import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DUPLICATE_WHILE_WRITING_TO_DATABASE;
+import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.*;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.*;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.SELECT_USER;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.*;
@@ -806,11 +806,127 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         throw new UnsupportedOperationException();
     }
 
-
+    /**
+     *
+     */
     @Override
-    public void addRole(String s, String[] strings, Permission[] permissions, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
-        throw new UnsupportedOperationException();
+    public void doAddRole(String roleName, String[] userList, boolean shared) throws UserStoreException {
 
+
+        if (shared && isSharedGroupEnabled()) {
+            doAddSharedRole(roleName, userList);
+        }
+
+        Connection dbConnection = null;
+
+        try {
+            dbConnection = getDBConnection();
+            String sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_ROLE);
+            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt, roleName, tenantId);
+            } else {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt, roleName);
+            }
+            if (userList != null) {
+                // add role to user
+                String type = DatabaseCreator.getDatabaseType(dbConnection);
+                String sqlStmt2;
+                if (isCaseSensitiveUsername()) {
+                    sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_TO_ROLE + "-" + type);
+                } else {
+                    sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
+                            .ADD_USER_TO_ROLE_CASE_INSENSITIVE + "-" + type);
+                }
+                if (sqlStmt2 == null) {
+                    if (isCaseSensitiveUsername()) {
+                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_TO_ROLE);
+                    } else {
+                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
+                                .ADD_USER_TO_ROLE_CASE_INSENSITIVE);
+                    }
+                }
+                if (sqlStmt2.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                    if (UserCoreConstants.OPENEDGE_TYPE.equals(type)) {
+                        DatabaseUtil.udpateUserRoleMappingInBatchMode(dbConnection, sqlStmt2,
+                                tenantId, userList, tenantId, roleName, tenantId);
+                    } else {
+                       DatabaseUtil.udpateUserRoleMappingInBatchMode(dbConnection, sqlStmt2,
+                                userList, tenantId, roleName, tenantId, tenantId);
+                    }
+                } else {
+                    DatabaseUtil.udpateUserRoleMappingInBatchMode(dbConnection, sqlStmt2, userList, roleName);
+                }
+
+            }
+            dbConnection.commit();
+        } catch (SQLException e) {
+            String msg = "Error occurred while adding role : " + roleName;
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        } catch (Exception e) {
+            String errorMessage = "Error occurred while getting database type from DB connection";
+            if (log.isDebugEnabled()) {
+                log.debug(errorMessage, e);
+            }
+            if (e instanceof UserStoreException && ERROR_CODE_DUPLICATE_WHILE_WRITING_TO_DATABASE.getCode().equals((
+                    (UserStoreException) e).getErrorCode())) {
+                // Duplicate entry
+                throw new UserStoreException(errorMessage, ERROR_CODE_DUPLICATE_WHILE_ADDING_ROLE.getCode(), e);
+            } else {
+                // Other SQL Exception
+                throw new UserStoreException(errorMessage, e);
+            }
+        } finally {
+            DatabaseUtil.closeAllConnections(dbConnection);
+        }
+    }
+
+
+
+    // TODO: sabthar, what is this shared role ?
+    protected void doAddSharedRole(String roleName, String[] userList) throws UserStoreException {
+
+        Connection dbConnection = null;
+
+        try {
+            dbConnection = getDBConnection();
+            String sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_SHARED_ROLE);
+            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt, true, roleName, tenantId);
+            } else {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt, true, roleName);
+            }
+            if (userList != null) {
+                // add role to user
+                int roleTenantId = Constants.SUPER_TENANT_ID;
+                if (isCaseSensitiveUsername()) {
+                    sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_SHARED_ROLE_TO_USER);
+                } else {
+                    sqlStmt = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
+                            .ADD_SHARED_ROLE_TO_USER_CASE_INSENSITIVE);
+                }
+                org.wso2.micro.integrator.security.user.core.util.DatabaseUtil.udpateUserRoleMappingInBatchMode(dbConnection, sqlStmt, roleName,
+                        roleTenantId, userList, tenantId,
+                        tenantId, roleTenantId);
+            }
+            dbConnection.commit();
+        } catch (SQLException e) {
+            String msg = "Database error occurred while adding shared role : " + roleName;
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        } catch (Exception e) {
+            String msg = "Error occurred while adding shared role.";
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        } finally {
+            org.wso2.micro.integrator.security.user.core.util.DatabaseUtil.closeAllConnections(dbConnection);
+        }
     }
 
     @Override

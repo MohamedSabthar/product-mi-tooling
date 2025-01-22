@@ -29,6 +29,10 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.synapse.MessageContext;
+import org.apache.synapse.commons.json.JsonUtil;
+import org.json.JSONObject;
+import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
@@ -44,7 +48,10 @@ import org.wso2.ei.dashboard.core.rest.model.RolesResourceResponse;
 import org.wso2.ei.dashboard.core.rest.model.UpdateRoleRequest;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
+import org.wso2.micro.integrator.security.user.api.UserStoreException;
+import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.Collections;
@@ -188,6 +195,20 @@ public class RolesDelegate {
             ack.setStatus(Constants.SUCCESS_STATUS);
         }
         return ack;
+    }
+
+    public Ack addRoleIcp(AddRoleRequest request) throws UserStoreException {
+        UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
+        if (request.getRoleName() != null) {
+            String role = request.getRoleName();
+            if (userStoreManager.isExistingRole(role)) {
+                throw new UserStoreException("The role : " + role + " already exists");
+            }
+            userStoreManager.addRole(role, null, null, false);
+            return new Ack(Constants.SUCCESS_STATUS);
+        } else {
+            throw new UserStoreException("Missing role name in the payload");
+        }
     }
 
     public Ack updateRole(String groupId, UpdateRoleRequest request) throws ManagementApiException {

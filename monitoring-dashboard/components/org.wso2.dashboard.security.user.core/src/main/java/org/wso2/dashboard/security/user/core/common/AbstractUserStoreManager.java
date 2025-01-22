@@ -22,6 +22,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
+import org.wso2.micro.integrator.security.user.api.Permission;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.core.UserCoreConstants;
 import org.wso2.micro.integrator.security.user.core.UserRealm;
@@ -742,6 +743,143 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      */
     protected abstract void doUpdateCredential(String userName, Object newCredential,
                                                Object oldCredential) throws UserStoreException;
+
+
+    /**
+     *
+     */
+    public void addRole(String roleName, String[] userList, Permission[] permissions, boolean isSharedRole)
+            throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+
+        if (StringUtils.isEmpty(roleName)) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_ADD_EMPTY_ROLE.toString());
+        }
+
+        UserStore userStore = getUserStore(roleName);
+
+        if (isSharedRole && !isSharedGroupEnabled()) {
+            throw new UserStoreException(
+                    UserCoreErrorConstants.ErrorMessages.ERROR_CODE_SHARED_ROLE_NOT_SUPPORTED.toString());
+        }
+
+
+
+        // #################### Domain Name Free Zone Starts Here ################################
+        if (userList == null) {
+            userList = new String[0];
+        }
+        if (permissions == null) {
+            permissions = new Permission[0];
+        }
+        // This happens only once during first startup - adding administrator user/role.
+        // TODO: sabthar, check domain, needed here
+//        if (roleName.indexOf(UserCoreConstants.DOMAIN_SEPARATOR) > 0) {
+//            roleName = userStore.getDomainFreeName();
+//            userList = UserCoreUtil.removeDomainFromNames(userList);
+//        }
+
+        // Check for validations
+        if (isReadOnly()) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+        }
+
+        if (!isRoleNameValid(roleName)) {
+            String regEx = realmConfig
+                    .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_ROLE_NAME_JAVA_REG_EX);
+            String errorMessage = String
+                    .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_ROLE_NAME.getMessage(), roleName, regEx);
+            String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_ROLE_NAME.getCode();
+           throw new UserStoreException(errorCode + " - " + errorMessage);
+        }
+
+        if (doCheckExistingRole(roleName)) {
+            handleRoleAlreadyExistException(roleName, userList, permissions);
+        }
+
+//        String roleWithDomain = null;
+        // TODO: sabhtar, what is this write gropus
+        if (writeGroupsEnabled) {
+            try {
+                // add role in to actual user store
+                doAddRole(roleName, userList, isSharedRole);
+//                roleWithDomain = UserCoreUtil.addDomainToName(roleName, getMyDomainName());
+            } catch (UserStoreException ex) {
+                throw ex;
+            }
+        } else {
+           throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_WRITE_GROUPS_NOT_ENABLED.toString());
+        }
+
+        // add permission in to the the permission store
+        if (permissions != null) {
+            for (Permission permission : permissions) {
+                String resourceId = permission.getResourceId();
+                String action = permission.getAction();
+                if (resourceId == null || resourceId.trim().length() == 0) {
+                    continue;
+                }
+
+                if (action == null || action.trim().length() == 0) {
+                    // default action value // TODO
+                    action = "read";
+                }
+                // This is a special case. We need to pass domain aware name.
+//                userRealm.getAuthorizationManager().authorizeRole(roleWithDomain, resourceId,
+//                        action);
+            }
+        }
+
+
+    }
+
+    /**
+     * @param roleName
+     * @return
+     */
+    protected boolean isRoleNameValid(String roleName) {
+        if (roleName == null) {
+            return false;
+        }
+
+        if (roleName.length() < 1) {
+            return false;
+        }
+
+        String regularExpression = realmConfig
+                .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_ROLE_NAME_JAVA_REG_EX);
+        if (regularExpression != null) {
+            if (!isFormatCorrect(regularExpression, roleName)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * This method handles role already exists exception.
+     *
+     * @param roleName    Name of teh role.
+     * @param userList    list of users.
+     * @param permissions Relevant permissions added for new role.
+     * @throws UserStoreException User Store Exception.
+     */
+    private void handleRoleAlreadyExistException(String roleName, String[] userList, Permission[] permissions) throws UserStoreException {
+
+        String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ROLE_ALREADY_EXISTS.getCode();
+        String errorMessage = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ROLE_ALREADY_EXISTS.getMessage(), roleName);
+      throw new UserStoreException(errorCode + " - " + errorMessage);
+    }
+
+    /**
+     * Add role with a list of users and permissions provided.
+     *
+     * @param roleName
+     * @param userList
+     * @throws UserStoreException
+     */
+    protected abstract void doAddRole(String roleName, String[] userList, boolean shared) throws UserStoreException;
+
 
 
 }
