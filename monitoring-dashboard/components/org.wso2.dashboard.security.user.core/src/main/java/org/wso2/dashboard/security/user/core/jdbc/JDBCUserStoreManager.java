@@ -39,6 +39,7 @@ import org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCas
 import org.wso2.micro.integrator.security.user.core.ldap.LDAPConstants;
 import org.wso2.micro.integrator.security.user.core.tenant.Tenant;
 import org.wso2.micro.integrator.security.user.core.util.JDBCRealmUtil;
+import org.wso2.micro.integrator.security.user.core.util.UserCoreUtil;
 
 import javax.sql.DataSource;
 import java.security.MessageDigest;
@@ -456,23 +457,183 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         return false;
     }
 
+    /**
+     *
+     */
     @Override
-    public String[] getRoleNames() throws UserStoreException {
-        return new String[0];
+    public String[] doGetRoleNames(String filter, int maxItemLimit) throws UserStoreException {
+
+        String[] roles = new String[0];
+        Connection dbConnection = null;
+        String sqlStmt = null;
+        PreparedStatement prepStmt = null;
+        ResultSet rs = null;
+
+        if (maxItemLimit == 0) {
+            return roles;
+        }
+
+        try {
+
+            if (filter != null && filter.trim().length() != 0) {
+                filter = filter.trim();
+                filter = filter.replace("*", "%");
+                filter = filter.replace("?", "_");
+            } else {
+                filter = "%";
+            }
+
+            List<String> lst = new LinkedList<String>();
+
+            dbConnection = getDBConnection();
+
+            if (dbConnection == null) {
+                throw new UserStoreException("null connection");
+            }
+
+            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_ROLE_LIST); // TODO
+
+            prepStmt = dbConnection.prepareStatement(sqlStmt);
+            //prepStmt.setString(1, filter);
+            byte count = 0;
+            prepStmt.setString(++count, filter);
+            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                prepStmt.setInt(++count, tenantId);
+            }
+            setPSRestrictions(prepStmt, maxItemLimit);
+            try {
+                rs = prepStmt.executeQuery();
+            } catch (SQLException e) {
+                if (e instanceof SQLTimeoutException) {
+                    log.error("The cause might be a time out. Hence ignored", e);
+                } else {
+                    String errorMessage =
+                            "Error while fetching roles from JDBC user store according to filter : " + filter +
+                                    " & max item limit : " + maxItemLimit;
+                    if (log.isDebugEnabled()) {
+                        log.debug(errorMessage, e);
+                    }
+                    throw new UserStoreException(errorMessage, e);
+                }
+            }
+
+            //Expected columns UM_ROLE_NAME, UM_TENANT_ID, UM_SHARED_ROLE
+            if (rs != null) {
+                while (rs.next()) {
+                    String name = rs.getString(1);
+                    // append the domain if exist
+//                    String domain =
+//                            realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME);
+//                    name = UserCoreUtil.addDomainToName(name, domain);
+                    lst.add(name);
+                }
+            }
+//
+//			if (isSharedGroupEnabled()) {
+//				lst.addAll(Arrays.asList(doGetSharedRoleNames(null, filter, maxItemLimit)));
+//			}
+//
+            if (lst.size() > 0) {
+                roles = lst.toArray(new String[lst.size()]);
+            }
+
+        } catch (SQLException e) {
+            String msg = "Error occurred while retrieving role names for filter : " + filter + " & max item limit : " +
+                    maxItemLimit;
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        } finally {
+            DatabaseUtil.closeAllConnections(dbConnection, rs, prepStmt);
+        }
+        return roles;
+
     }
 
-    @Override
-    public String[] getRoleNames(boolean b) throws UserStoreException {
-        return new String[0];
+    public String[] doGetUserListOfRole(String roleName, String filter) throws UserStoreException {
+
+        RoleContext roleContext = createRoleContext(roleName);
+        return getUserListOfJDBCRole(roleContext, filter);
     }
 
+
+    /**
+     *
+     */
+    public String[] getUserListOfJDBCRole(RoleContext ctx, String filter) throws UserStoreException {
+
+        String roleName = ctx.getRoleName();
+        String[] names = null;
+        String sqlStmt = null;
+        if (!ctx.isShared()) {
+            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_USERS_IN_ROLE);
+            if (sqlStmt == null) {
+                throw new UserStoreException("The sql statement for retrieving user roles is null");
+            }
+            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                names =
+                        getStringValuesFromDatabase(sqlStmt, roleName, tenantId, tenantId, tenantId);
+            } else {
+                names = getStringValuesFromDatabase(sqlStmt, roleName);
+            }
+        } else if (ctx.isShared()) {
+            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_USERS_IN_SHARED_ROLE);
+            names = getStringValuesFromDatabase(sqlStmt, roleName);
+        }
+
+        List<String> userList = new ArrayList<String>();
+
+        String domainName =
+                realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME);
+
+        if (names != null) {
+            for (String user : names) {
+                user = UserCoreUtil.addDomainToName(user, domainName);
+                userList.add(user);
+            }
+
+            names = userList.toArray(new String[userList.size()]);
+        }
+        log.debug("Roles are not defined for the role name " + roleName);
+
+        return names;
+    }
+
+
+    private void setPSRestrictions(PreparedStatement ps, int maxItemLimit) throws SQLException {
+
+        int givenMax;
+
+        int searchTime;
+
+        try {
+            givenMax = Integer.parseInt(realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_MAX_ROLE_LIST));
+        } catch (Exception e) {
+            givenMax = UserCoreConstants.MAX_USER_ROLE_LIST;
+        }
+
+        try {
+            searchTime =
+                    Integer.parseInt(realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_MAX_SEARCH_TIME));
+        } catch (Exception e) {
+            searchTime = UserCoreConstants.MAX_SEARCH_TIME;
+        }
+
+        if (maxItemLimit < 0 || maxItemLimit > givenMax) {
+            maxItemLimit = givenMax;
+        }
+
+        ps.setMaxRows(maxItemLimit);
+        try {
+            ps.setQueryTimeout(searchTime);
+        } catch (Exception e) {
+            // this can be ignored since timeout method is not implemented
+            log.debug(e);
+        }
+    }
     @Override
     public String[] getProfileNames(String s) throws UserStoreException {
-        return new String[0];
-    }
-
-    @Override
-    public String[] getUserListOfRole(String s) throws UserStoreException {
         return new String[0];
     }
 

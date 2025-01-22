@@ -1057,10 +1057,10 @@ public class GroupsApi {
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get All Roles");
         try {
-            RolesResourceResponse roleList = rolesDelegate.getAllRoles(groupId);
+            RolesResourceResponse roleList = rolesDelegate.getAllRolesIcp();
             responseBuilder = Response.ok().entity(roleList);
-        } catch (ManagementApiException e) {
-            responseBuilder = Response.status(e.getErrorCode()).entity(getError(e));
+        } catch (UserStoreException e) {
+            responseBuilder = Response.status(500).entity(getError(e));
         }
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();
@@ -1089,10 +1089,10 @@ public class GroupsApi {
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Roles");
         try {
-            RolesResourceResponse roleList = rolesDelegate.fetchPaginatedRolesResponse(groupId, searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
+            RolesResourceResponse roleList = rolesDelegate.fetchPaginatedRolesResponseIcp(searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
             responseBuilder = Response.ok().entity(roleList);
-        } catch (ManagementApiException e) {
-            responseBuilder = Response.status(e.getErrorCode()).entity(getError(e));
+        } catch (UserStoreException e) {
+            responseBuilder = Response.status(500).entity(getError(e));
         }
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();
@@ -1369,6 +1369,13 @@ public class GroupsApi {
     private Error getError(ManagementApiException e) {
         Error error = new Error();
         error.setCode(e.getErrorCode());
+        error.setMessage(e.getMessage());
+        return error;
+    }
+
+    private Error getError(UserStoreException e) {
+        Error error = new Error();
+        error.setCode(500);
         error.setMessage(e.getMessage());
         return error;
     }

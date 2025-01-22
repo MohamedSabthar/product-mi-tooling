@@ -1107,13 +1107,13 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public String[] getRoleNames() throws UserStoreException {
-        return new String[0];
+    protected String[] doGetRoleNames(String filter, int maxItemLimit) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public String[] getRoleNames(boolean b) throws UserStoreException {
-        return new String[0];
+    protected String[] doGetUserListOfRole(String roleName, String filter) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -1121,10 +1121,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
         return new String[0];
     }
 
-    @Override
-    public String[] getUserListOfRole(String s) throws UserStoreException {
-        return new String[0];
-    }
+
 
     @Override
     public String getUserClaimValue(String s, String s1, String s2) throws UserStoreException {

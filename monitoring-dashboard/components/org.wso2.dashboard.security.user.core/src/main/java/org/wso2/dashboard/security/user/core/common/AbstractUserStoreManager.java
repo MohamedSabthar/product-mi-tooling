@@ -34,6 +34,7 @@ import org.wso2.micro.integrator.security.user.core.common.RoleContext;
 import org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants;
 import org.wso2.micro.integrator.security.user.core.hybrid.HybridRoleManager;
 import org.wso2.micro.integrator.security.user.core.internal.UMListenerServiceComponent;
+import org.wso2.micro.integrator.security.user.core.ldap.LDAPConstants;
 import org.wso2.micro.integrator.security.user.core.listener.SecretHandleableListener;
 import org.wso2.micro.integrator.security.user.core.listener.UserOperationEventListener;
 import org.wso2.micro.integrator.security.user.core.multiplecredentials.UserAlreadyExistsException;
@@ -74,6 +75,8 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     protected SystemUserRoleManager systemUserRoleManager = null;
     protected boolean readGroupsEnabled = false;
     protected boolean writeGroupsEnabled = false;
+    private static final int MAX_ITEM_LIMIT_UNLIMITED = -1;
+
 
     @Override
     public boolean authenticate(final String userName, final Object credential) {
@@ -881,5 +884,87 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     protected abstract void doAddRole(String roleName, String[] userList, boolean shared) throws UserStoreException;
 
 
+    /**
+     * {@inheritDoc}
+     */
+    public final String[] getRoleNames() throws UserStoreException {
+        return getRoleNames(false);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public final String[] getRoleNames(boolean noHybridRoles) throws UserStoreException {
+        return getRoleNames("*", MAX_ITEM_LIMIT_UNLIMITED, noHybridRoles, true, true);
+    }
+
+    /**
+     * TODO This method would returns the role Name actually this must be implemented in interface.
+     * As it is not good to change the API in point release. This has been added to Abstract class
+     *
+     * @param filter
+     * @param maxItemLimit
+     * @param noInternalRoles
+     * @return
+     * @throws UserStoreException
+     */
+    public final String[] getRoleNames(String filter, int maxItemLimit, boolean noInternalRoles,
+                                       boolean noSystemRole, boolean noSharedRoles)
+            throws UserStoreException {
+
+        String[] roleList = new String[0];
+        // TODO: sabhtar, what is this read group
+        if (readGroupsEnabled) {
+            String[] externalRoles = doGetRoleNames(filter, maxItemLimit);
+            roleList = UserCoreUtil.combineArrays(externalRoles, roleList);
+        }
+        return roleList;
+    }
+
+    /**
+     * This method would returns the role Name actually this must be implemented in interface. As it
+     * is not good to change the API in point release. This has been added to Abstract class
+     *
+     * @param filter
+     * @param maxItemLimit
+     * @return
+     * @throws .UserStoreException
+     */
+    protected abstract String[] doGetRoleNames(String filter, int maxItemLimit)
+            throws UserStoreException;
+
+
+    /**
+     * {@inheritDoc}
+     */
+    public final String[] getUserListOfRole(String roleName) throws UserStoreException {
+
+
+        String[] userNames = new String[0];
+
+        // If role does not exit, just return
+        if (!isExistingRole(roleName)) {
+            return userNames;
+        }
+
+
+
+        if (readGroupsEnabled) {
+            userNames = doGetUserListOfRole(roleName, "*");
+        }
+
+        return userNames;
+    }
+
+
+
+    /**
+     * @param roleName
+     * @param filter
+     * @return
+     * @throws UserStoreException
+     */
+    protected abstract String[] doGetUserListOfRole(String roleName, String filter)
+            throws UserStoreException;
 
 }
