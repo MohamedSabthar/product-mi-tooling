@@ -28,9 +28,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.tools.ant.taskdefs.condition.Http;
-import org.checkerframework.checker.units.qual.A;
-import org.wso2.ei.dashboard.core.commons.auth.TokenGenerator;
+import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.exception.ManagementApiException;
 import org.wso2.ei.dashboard.core.rest.annotation.Secured;
@@ -208,7 +206,7 @@ public class GroupsApi {
                 HttpUtils.setHeaders(responseBuilder);
                 return responseBuilder.build();
             } catch (UserStoreException e) {
-                Ack ack = new Ack("500");
+                Ack ack = new Ack(Constants.FAIL_STATUS);
                 ack.message(e.getMessage());
                 Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
                 HttpUtils.setHeaders(responseBuilder);
@@ -243,7 +241,7 @@ public class GroupsApi {
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
         } catch (UserStoreException e) {
-            ack = new Ack("500");
+            ack = new Ack(Constants.FAIL_STATUS);
             Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -1124,7 +1122,7 @@ public class GroupsApi {
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
         } catch (UserStoreException e) {
-            Ack ack = new Ack("500");
+            Ack ack = new Ack(Constants.FAIL_STATUS);
             ack.message(e.getMessage());
             Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
@@ -1149,10 +1147,19 @@ public class GroupsApi {
 //        TODO: sabthar, icp
 
         RolesDelegate rolesDelegate = new RolesDelegate();
-        Ack ack = rolesDelegate.updateRole(groupId, request);
-        Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
-        HttpUtils.setHeaders(responseBuilder);
-        return responseBuilder.build();
+        try {
+            Ack ack = rolesDelegate.updateRoleIcp(request);
+            Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        } catch (UserStoreException e) {
+            Ack ack = new Ack(Constants.FAIL_STATUS);
+            ack.message(e.getMessage());
+            Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        }
+
     }
 
     @DELETE

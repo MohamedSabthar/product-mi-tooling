@@ -31,7 +31,9 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.commons.json.JsonUtil;
+import org.checkerframework.checker.units.qual.A;
 import org.json.JSONObject;
+import org.wso2.dashboard.security.user.core.UserStore;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
@@ -153,7 +155,7 @@ public class RolesDelegate {
             inner.setRoleName(role);
             JsonArray jsonArray = new JsonArray();
             Arrays.stream(UserStoreManagerUtils.getUserStoreManager().getRoleListOfUser(role)).forEach(jsonArray::add);
-            inner.setDetails(jsonArray.getAsString());
+            inner.setDetails(jsonArray.toString());
             roleList.add(inner);
         }
         rolesResourceResponse.setResourceList(roleList);
@@ -207,6 +209,7 @@ public class RolesDelegate {
     }
 
     public Ack addRoleIcp(AddRoleRequest request) throws UserStoreException {
+//        TODO: sabthar, add debug logs to all ICP
         UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
         if (request.getRoleName() != null) {
             String role = request.getRoleName();
@@ -312,7 +315,7 @@ public class RolesDelegate {
         inner.setRoleName(role);
         JsonObject rolesObject = new JsonObject();
         JsonArray jsonArray = new JsonArray();
-        Arrays.stream(UserStoreManagerUtils.getUserStoreManager().getRoleListOfUser(role)).forEach(jsonArray::add);
+        Arrays.stream(UserStoreManagerUtils.getUserStoreManager().getUserListOfRole(role)).forEach(jsonArray::add);
         rolesObject.add("users", jsonArray);
         inner.setDetails(rolesObject.toString());
         return inner;
@@ -416,5 +419,15 @@ public class RolesDelegate {
             log.error("Illegal arguments for index values", e);
         }
         return null;
+    }
+
+    public Ack updateRoleIcp(UpdateRoleRequest request) throws UserStoreException {
+        UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
+        if (userStoreManager.isExistingUser(request.getUserId())) {
+            throw new UserStoreException("The user : " + request.getUserId() + " does not exists");
+        }
+        userStoreManager.updateRoleListOfUser(request.getUserId() ,request.getRemovedRoles().toArray(new String[0]) ,request.getAddedRoles().toArray(new String[0]));
+        Ack ack = new Ack(Constants.SUCCESS_STATUS);
+        return ack;
     }
 }

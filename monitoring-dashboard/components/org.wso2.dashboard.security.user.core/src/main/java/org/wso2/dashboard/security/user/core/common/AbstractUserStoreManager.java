@@ -34,7 +34,6 @@ import org.wso2.micro.integrator.security.user.core.common.RoleContext;
 import org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants;
 import org.wso2.micro.integrator.security.user.core.hybrid.HybridRoleManager;
 import org.wso2.micro.integrator.security.user.core.internal.UMListenerServiceComponent;
-import org.wso2.micro.integrator.security.user.core.ldap.LDAPConstants;
 import org.wso2.micro.integrator.security.user.core.listener.SecretHandleableListener;
 import org.wso2.micro.integrator.security.user.core.listener.UserOperationEventListener;
 import org.wso2.micro.integrator.security.user.core.multiplecredentials.UserAlreadyExistsException;
@@ -59,9 +58,7 @@ import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConf
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG_EX;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.SHARED_GROUPS_ENABLED;
-import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ERROR_WHILE_AUTHENTICATION;
-import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ERROR_WHILE_PRE_AUTHENTICATION;
-import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE;
+import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.*;
 
 public abstract class AbstractUserStoreManager implements UserStoreManager {
     private static final Log log = LogFactory.getLog(AbstractUserStoreManager.class);
@@ -161,6 +158,15 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
             throw new UserStoreException(e);
         }
     }
+
+    /**
+     * @param roleName
+     * @param filter
+     * @return
+     * @throws UserStoreException
+     */
+    protected abstract String[] doGetUserListOfRole(String roleName, String filter)
+            throws UserStoreException;
 
     public final String[] doGetRoleListOfUser(String userName, String filter) throws UserStoreException {
         if (!readGroupsEnabled) {
@@ -956,15 +962,303 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         return userNames;
     }
 
+    public final void updateRoleListOfUser(final String username, final String[] deletedRoles, final String[] newRoles)
+            throws UserStoreException {
+        try {
+            AccessController.doPrivileged(new PrivilegedExceptionAction<String>() {
+                @Override
+                public String run() throws Exception {
+                    updateRoleListOfUserInternal(username, deletedRoles, newRoles);
+                    return null;
+                }
+            });
+        } catch (PrivilegedActionException e) {
+            throw (UserStoreException) e.getException();
+        }
+    }
 
 
     /**
+     * {@inheritDoc}
+     */
+    private final void updateRoleListOfUserInternal(String userName, String[] deletedRoles, String[] newRoles)
+            throws UserStoreException {
+
+
+        if (deletedRoles != null && deletedRoles.length > 0) {
+            Arrays.sort(deletedRoles);
+//            if (UserCoreUtil.isPrimaryAdminUser(userName, realmConfig)) {
+                for (String deletedRole : deletedRoles) {
+                    if (deletedRole.equalsIgnoreCase(realmConfig.getAdminRoleName())) {
+                        throw new UserStoreException(ERROR_CODE_CANNOT_REMOVE_ADMIN_ROLE_FROM_ADMIN.toString());
+                    }
+                }
+//            }
+        }
+
+        UserStore userStore = getUserStore(userName);
+
+        // TODO: sabthar, check what is this system store
+//        if (userStore.isSystemStore()) {
+//            systemUserRoleManager.updateSystemRoleListOfUser(userStore.getDomainFreeName(),
+//                    UserCoreUtil.removeDomainFromNames(deletedRoles),
+//                    UserCoreUtil.removeDomainFromNames(newRoles));
+//            return;
+//        }
+
+        // #################### Domain Name Free Zone Starts Here ################################
+        if (deletedRoles == null) {
+            deletedRoles = new String[0];
+        }
+        if (newRoles == null) {
+            newRoles = new String[0];
+        }
+        // This happens only once during first startup - adding administrator user/role.
+//        if (userName.indexOf(UserCoreConstants.DOMAIN_SEPARATOR) > 0) {
+//            userName = userStore.getDomainFreeName();
+//            deletedRoles = UserCoreUtil.removeDomainFromNames(deletedRoles);
+//            newRoles = UserCoreUtil.removeDomainFromNames(newRoles);
+//        }
+
+        List<String> internalRoleDel = new ArrayList<String>();
+        List<String> internalRoleNew = new ArrayList<String>();
+
+        List<String> roleDel = new ArrayList<String>();
+        List<String> roleNew = new ArrayList<String>();
+
+        if (deletedRoles.length > 0) {
+            for (String deleteRole : deletedRoles) {
+//                if (UserCoreUtil.isEveryoneRole(deleteRole, realmConfig)) {
+//                    handleUpdateRoleListOfUserFailure(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.getCode(),
+//                            UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.getMessage(), userName, deletedRoles,
+//                            newRoles);
+//                    throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.toString());
+//                }
+//                String domain = null;
+//                int index1 = deleteRole.indexOf(UserCoreConstants.DOMAIN_SEPARATOR);
+//                if (index1 > 0) {
+//                    domain = deleteRole.substring(0, index1);
+//                }
+//                if (APPLICATION_DOMAIN.equalsIgnoreCase(domain) || WORKFLOW_DOMAIN.equalsIgnoreCase(domain)) {
+//                    internalRoleDel.add(deleteRole);
+//                } else if (UserCoreConstants.INTERNAL_DOMAIN.equalsIgnoreCase(domain) || this.isReadOnly()) {
+//                    internalRoleDel.add(UserCoreUtil.removeDomainFromName(deleteRole));
+//                } else {
+                    // This is domain free role name.
+                    roleDel.add(deleteRole);
+//                }
+            }
+            deletedRoles = roleDel.toArray(new String[roleDel.size()]);
+        }
+
+        if (newRoles.length > 0) {
+            for (String newRole : newRoles) {
+//                if (UserCoreUtil.isEveryoneRole(newRole, realmConfig)) {
+//                    handleUpdateRoleListOfUserFailure(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.getCode(),
+//                            UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.getMessage(), userName, deletedRoles,
+//                            newRoles);
+//                    throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.toString());
+//                }
+//                String domain = null;
+//                int index2 = newRole.indexOf(UserCoreConstants.DOMAIN_SEPARATOR);
+//                if (index2 > 0) {
+//                    domain = newRole.substring(0, index2);
+//                }
+//
+//                if (UserCoreConstants.INTERNAL_DOMAIN.equalsIgnoreCase(domain)) {
+//                    // If this is an internal role.
+//                    internalRoleNew.add(UserCoreUtil.removeDomainFromName(newRole));
+//                } else if (APPLICATION_DOMAIN.equalsIgnoreCase(domain) || WORKFLOW_DOMAIN.equalsIgnoreCase(domain)) {
+//                    // If this is an application role or workflow role.
+//                    internalRoleNew.add(newRole);
+//                } else if (this.isReadOnly()) {
+//                    // If this is a readonly user store, we add even normal roles as internal roles.
+//                    internalRoleNew.add(UserCoreUtil.removeDomainFromName(newRole));
+//                } else {
+                    roleNew.add(newRole);
+//                }
+            }
+            newRoles = roleNew.toArray(new String[roleNew.size()]);
+        }
+
+//        if (internalRoleDel.size() > 0 || internalRoleNew.size() > 0) {
+//            hybridRoleManager.updateHybridRoleListOfUser(userStore.getDomainFreeName(),
+//                    internalRoleDel.toArray(new String[internalRoleDel.size()]),
+//                    internalRoleNew.toArray(new String[internalRoleNew.size()]));
+//        }
+
+        if (deletedRoles.length > 0 || newRoles.length > 0) {
+            if (!isReadOnly() && writeGroupsEnabled) {
+                doUpdateRoleListOfUser(userName, deletedRoles, newRoles);
+            } else {
+                throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            }
+        }
+    }
+
+    /**
+     * Update role list of a particular user
+     *
+     * @param userName     The user name
+     * @param deletedRoles Array of role names, that is going to be removed from the user
+     * @param newRoles     Array of role names, that is going to be added to the user
+     * @throws UserStoreException An unexpected exception has occurred
+     */
+    protected abstract void doUpdateRoleListOfUser(String userName, String[] deletedRoles,
+                                                   String[] newRoles) throws UserStoreException;
+
+
+    /**
+     * TODO move to API
+     *
+     * @param userName
      * @param roleName
-     * @param filter
      * @return
      * @throws UserStoreException
      */
-    protected abstract String[] doGetUserListOfRole(String roleName, String filter)
-            throws UserStoreException;
+    public boolean isUserInRole(String userName, String roleName) throws UserStoreException {
 
+        if (roleName == null || roleName.trim().length() == 0 || userName == null ||
+                userName.trim().length() == 0) {
+            return false;
+        }
+
+        // TODO: sabthar, check this anonymous user
+//        // anonymous user is always assigned to  anonymous role
+//        if (UserCoreConstants.REGISTRY_ANONNYMOUS_ROLE_NAME.equalsIgnoreCase(roleName) &&
+//                UserCoreConstants.REGISTRY_ANONNYMOUS_USERNAME.equalsIgnoreCase(userName)) {
+//            return true;
+//        }
+//
+//        if (!UserCoreConstants.REGISTRY_ANONNYMOUS_USERNAME.equalsIgnoreCase(userName) &&
+//                realmConfig.getEveryOneRoleName().equalsIgnoreCase(roleName) &&
+//                !systemUserRoleManager.isExistingSystemUser(UserCoreUtil.
+//                        removeDomainFromName(userName))) {
+//            return true;
+//        }
+
+
+        String[] roles = null;
+//
+//        String modifiedUserName = UserCoreConstants.IS_USER_IN_ROLE_CACHE_IDENTIFIER + userName;
+//        if (UserCoreConstants.INTERNAL_DOMAIN.
+//                equalsIgnoreCase(UserCoreUtil.extractDomainFromName(roleName))
+//                || APPLICATION_DOMAIN.equalsIgnoreCase(UserCoreUtil.extractDomainFromName(roleName)) ||
+//                WORKFLOW_DOMAIN.equalsIgnoreCase(UserCoreUtil.extractDomainFromName(roleName))) {
+//
+//            String[] internalRoles = doGetInternalRoleListOfUser(userName, roleName);
+//            if (UserCoreUtil.isContain(roleName, internalRoles)) {
+//                addToIsUserHasRole(modifiedUserName, roleName, roles);
+//                return true;
+//            }
+//        }
+
+        UserStore userStore = getUserStore(userName);
+
+        // #################### Domain Name Free Zone Starts Here ################################
+
+//        if (userStore.isSystemStore()) {
+//            return systemUserRoleManager.isUserInRole(userStore.getDomainFreeName(),
+//                    UserCoreUtil.removeDomainFromName(roleName));
+//        }
+
+        // admin user is always assigned to admin role if it is in primary user store
+        if (
+//                realmConfig.isPrimary() &&
+                roleName.equalsIgnoreCase(realmConfig.getAdminRoleName()) &&
+                userName.equalsIgnoreCase(realmConfig.getAdminUserName())) {
+            return true;
+        }
+
+        boolean success = false;
+        if (readGroupsEnabled) {
+            success = doCheckIsUserInRole(userStore.getDomainFreeName(), roleName);
+        }
+
+        // add to cache
+        if (success) {
+            String modifiedUserName = UserCoreConstants.IS_USER_IN_ROLE_CACHE_IDENTIFIER + userName;
+            addToIsUserHasRole(modifiedUserName, roleName, roles);
+        }
+        return success;
+    }
+
+
+    /**
+     * @param userName
+     * @param roleName
+     * @return
+     * @throws UserStoreException
+     */
+    public abstract boolean doCheckIsUserInRole(String userName, String roleName) throws UserStoreException;
+
+
+    /**
+     * Helper method
+     *
+     * @param userName
+     * @param roleName
+     * @param currentRoles
+     */
+    private void addToIsUserHasRole(String userName, String roleName, String[] currentRoles) {
+        List<String> roles;
+        if (currentRoles != null) {
+            roles = new ArrayList<String>(Arrays.asList(currentRoles));
+        } else {
+            roles = new ArrayList<String>();
+        }
+        roles.add(roleName);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public boolean isExistingRole(String roleName) throws UserStoreException {
+
+
+
+UserStore userStore = getUserStore(roleName);
+
+
+        // #################### Domain Name Free Zone Starts Here ################################
+
+//        if (userStore.isSystemStore()) {
+//            return systemUserRoleManager.isExistingRole(userStore.getDomainFreeName());
+//        }
+
+//        if (userStore.isHybridRole()) {
+//            boolean exist;
+//
+//            if (!UserCoreConstants.INTERNAL_DOMAIN.equalsIgnoreCase(userStore.getDomainName())) {
+//                exist = hybridRoleManager.isExistingRole(userStore.getDomainAwareName());
+//            } else {
+//                exist = hybridRoleManager.isExistingRole(userStore.getDomainFreeName());
+//            }
+//
+//            return exist;
+//        }
+
+        // This happens only once during first startup - adding administrator user/role.
+        roleName = userStore.getDomainFreeName();
+
+//        // you can not check existence of shared role using this method.
+//        if (isSharedGroupEnabled() && roleName.contains(UserCoreConstants.TENANT_DOMAIN_COMBINER)) {
+//            return false;
+//        }
+
+        boolean isExisting = doCheckExistingRole(roleName);
+//
+//        if (!isExisting && (isReadOnly() || !readGroupsEnabled)) {
+//            isExisting = hybridRoleManager.isExistingRole(roleName);
+//        }
+
+        // systemUserRoleManager is not initialized
+//        if (!isExisting) {
+//            if (systemUserRoleManager.isExistingRole(roleName)) {
+//                isExisting = true;
+//            }
+//        }
+
+        return isExisting;
+    }
 }

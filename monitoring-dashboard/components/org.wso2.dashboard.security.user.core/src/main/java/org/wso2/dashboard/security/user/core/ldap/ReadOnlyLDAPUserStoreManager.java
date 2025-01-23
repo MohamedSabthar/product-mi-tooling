@@ -1102,11 +1102,6 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public boolean isExistingRole(String s) throws UserStoreException {
-        return false;
-    }
-
-    @Override
     protected String[] doGetRoleNames(String filter, int maxItemLimit) throws UserStoreException {
         throw new UnsupportedOperationException();
     }
@@ -1217,8 +1212,13 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void updateRoleListOfUser(String s, String[] strings, String[] strings1) throws UserStoreException {
+    protected void doUpdateRoleListOfUser(String userName, String[] deletedRoles, String[] newRoles) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
 
+    @Override
+    public boolean doCheckIsUserInRole(String userName, String roleName) throws UserStoreException {
+        throw new UnsupportedOperationException();
     }
 
     @Override
