@@ -1261,4 +1261,54 @@ UserStore userStore = getUserStore(roleName);
 
         return isExisting;
     }
+
+    /**
+     * Delete the role with the given role name
+     *
+     * @param roleName The role name
+     * @throws org.wso2.micro.integrator.security.user.core.UserStoreException
+     */
+    public final void deleteRole(String roleName) throws UserStoreException {
+
+
+        if (realmConfig.getAdminRoleName().equalsIgnoreCase(roleName)) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_DELETE_ADMIN_ROLE.toString());
+        }
+//        if (UserCoreUtil.isEveryoneRole(roleName, realmConfig)) {
+//           throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_DELETE_EVERYONE_ROLE.toString());
+//        }
+
+      UserStore userStore = getUserStore(roleName);
+
+
+        if (!doCheckExistingRole(roleName)) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_DELETE_NON_EXISTING_ROLE.toString());
+        }
+
+
+        if (isReadOnly()) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+        }
+
+        if (!writeGroupsEnabled) {
+            throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_WRITE_GROUPS_NOT_ENABLED.toString());
+        }
+        try {
+            doDeleteRole(roleName);
+        } catch (UserStoreException ex) {
+            throw ex;
+        }
+
+    }
+
+
+    /**
+     * delete the role.
+     *
+     * @param roleName
+     * @throws UserStoreException
+     */
+    protected abstract void doDeleteRole(String roleName) throws UserStoreException;
+
+
 }

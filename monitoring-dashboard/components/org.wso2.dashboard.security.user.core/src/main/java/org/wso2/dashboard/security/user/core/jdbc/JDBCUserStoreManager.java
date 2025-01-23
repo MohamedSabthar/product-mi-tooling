@@ -773,11 +773,6 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void deleteRole(String s) throws UserStoreException {
-
-    }
-
-    @Override
     public void updateUserListOfRole(String s, String[] strings, String[] strings1) throws UserStoreException {
 
     }
@@ -1848,5 +1843,44 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         return false;
     }
 
+    /**
+     *
+     */
+    public void doDeleteRole(String roleName) throws UserStoreException {
+
+        String sqlStmt1 = realmConfig
+                .getUserStoreProperty(JDBCRealmConstants.ON_DELETE_ROLE_REMOVE_USER_ROLE);
+        if (sqlStmt1 == null) {
+            throw new UserStoreException("The sql statement for delete user-role mapping is null");
+        }
+
+        String sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.DELETE_ROLE);
+        if (sqlStmt2 == null) {
+            throw new UserStoreException("The sql statement for delete role is null");
+        }
+
+        Connection dbConnection = null;
+        try {
+            dbConnection = getDBConnection();
+            if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, roleName, tenantId,
+                        tenantId);
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt2, roleName, tenantId);
+            } else {
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, roleName);
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt2, roleName);
+            }
+            //this.userRealm.getAuthorizationManager().clearRoleAuthorization(roleName);
+            dbConnection.commit();
+        } catch (SQLException e) {
+            String msg = "Error occurred while deleting role : " + roleName;
+            if (log.isDebugEnabled()) {
+                log.debug(msg, e);
+            }
+            throw new UserStoreException(msg, e);
+        } finally {
+            DatabaseUtil.closeAllConnections(dbConnection);
+        }
+    }
 }
 

@@ -1179,12 +1179,18 @@ public class GroupsApi {
             @QueryParam("domain") @Parameter(description = "domain name") String domain)
             throws ManagementApiException {
 //        TODO: sabthar, icp
-
         RolesDelegate rolesDelegate = new RolesDelegate();
-        Ack ack = rolesDelegate.deleteRole(groupId, roleName, domain);
-        Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
-        HttpUtils.setHeaders(responseBuilder);
-        return responseBuilder.build();
+        try {
+            Ack ack = rolesDelegate.deleteRoleIcp(roleName);
+            Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        } catch (UserStoreException e) {
+            Ack ack = new Ack(Constants.FAIL_STATUS);
+            Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        }
     }
 
     @GET

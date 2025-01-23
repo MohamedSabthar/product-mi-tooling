@@ -430,4 +430,22 @@ public class RolesDelegate {
         Ack ack = new Ack(Constants.SUCCESS_STATUS);
         return ack;
     }
+
+    public Ack deleteRoleIcp(String roleName) throws UserStoreException {
+        // TODO: sabthar, introduce super admin config
+//        String adminRole = realmConfig.getAdminRoleName().equalsIgnoreCase(roleName);
+//        if (roleName.equals(adminRole)) {
+//            throw new UserStoreException("Cannot remove the admin role");
+//        }
+        if (log.isDebugEnabled()) {
+            log.debug("Requested details for the role: " + roleName);
+        }
+        UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
+        if (userStoreManager.isExistingRole(roleName)) {
+            userStoreManager.deleteRole(roleName);
+        } else {
+            throw new UserStoreException("Role: " + roleName + " cannot be found.");
+        }
+        return new Ack(Constants.SUCCESS_STATUS);
+    }
 }

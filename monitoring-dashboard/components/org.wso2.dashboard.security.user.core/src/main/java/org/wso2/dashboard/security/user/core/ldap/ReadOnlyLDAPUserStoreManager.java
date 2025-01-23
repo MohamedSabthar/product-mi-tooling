@@ -1201,10 +1201,6 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     }
 
-    @Override
-    public void deleteRole(String s) throws UserStoreException {
-
-    }
 
     @Override
     public void updateUserListOfRole(String s, String[] strings, String[] strings1) throws UserStoreException {
@@ -1218,6 +1214,11 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     public boolean doCheckIsUserInRole(String userName, String roleName) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void doDeleteRole(String roleName) throws UserStoreException {
         throw new UnsupportedOperationException();
     }
 
