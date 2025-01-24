@@ -100,6 +100,11 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         realmConfig.setUserStoreProperties(JDBCRealmUtil.getSQL(realmConfig
                 .getUserStoreProperties()));
 
+        if (realmConfig.isPrimary()) {
+            addInitialAdminData(Boolean.parseBoolean(realmConfig.getAddAdmin()));
+        }
+
+
         if (log.isDebugEnabled()) {
             log.debug("Ended " + System.currentTimeMillis());
         }
@@ -828,7 +833,7 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     public RealmConfiguration getRealmConfiguration() {
-        return null;
+        return realmConfig;
     }
 
     @Override

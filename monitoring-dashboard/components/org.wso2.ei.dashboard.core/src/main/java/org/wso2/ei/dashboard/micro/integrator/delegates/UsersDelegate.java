@@ -35,6 +35,7 @@ import org.jetbrains.annotations.NotNull;
 import org.json.JSONObject;
 import org.wso2.dashboard.security.user.core.UserStore;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
+import org.wso2.dashboard.security.user.core.common.DataHolder;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
 import org.wso2.ei.dashboard.core.data.manager.DataManager;
@@ -51,6 +52,7 @@ import org.wso2.ei.dashboard.core.rest.model.UsersResourceResponse;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
 import org.wso2.micro.core.util.AuditLogger;
+import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.api.UserStoreException;
 import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
@@ -294,12 +296,11 @@ public class UsersDelegate {
     }
 
 
-    public Ack deleteUserIcp(String userId, String domain) throws UserStoreException {
+    public Ack deleteUserIcp(String userId, String performedBy) throws UserStoreException {
         if (log.isDebugEnabled()) {
             log.debug("Request received to delete the user: " + userId);
         }
         // TODO: sabthar, set the performed by user from request context. This need to set from security handler/Authentication filter
-        String performedBy = null;
         if (Objects.isNull(performedBy)) {
             log.warn(
                     "Deleting a user without authenticating/authorizing the request sender. Adding "
@@ -315,9 +316,11 @@ public class UsersDelegate {
         String[] roles = userStoreManager.getRoleListOfUser(userId);
 
         // TODO: sabthar, revisit this logic. This should be read from config
-//        if (ADMIN.equals(performedBy)) {
-//            userStoreManager.deleteUser(user);
-//        } else
+        RealmConfiguration realmConfig = DataHolder.getInstance().getRealmConfig();
+        String superAdmin = realmConfig.getAdminRoleName();
+        if (superAdmin != null && superAdmin.equals(performedBy)) {
+            userStoreManager.deleteUser(userId);
+        } else
         if (!Arrays.asList(roles).contains(ADMIN)) {
             userStoreManager.deleteUser(userId);
         } else {

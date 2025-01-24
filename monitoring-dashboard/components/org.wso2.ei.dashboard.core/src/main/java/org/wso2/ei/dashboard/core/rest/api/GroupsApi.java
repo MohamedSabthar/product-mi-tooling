@@ -232,11 +232,13 @@ public class GroupsApi {
     public Response deleteUser(
             @PathParam("group-id") @Parameter(description = "Group ID") String groupId,
             @PathParam("user-id") @Parameter(description = "User ID") String userId,
-            @QueryParam("domain") @Parameter(description = "domain name") String domain) throws ManagementApiException {
+            @QueryParam("domain") @Parameter(description = "domain name") String domain,
+            @Context ContainerRequestContext requestContext) throws ManagementApiException {
         UsersDelegate usersDelegate = new UsersDelegate();
         Ack ack = null;
+        String performedBy = (String) requestContext.getProperty("performedBy");
         try {
-            ack = usersDelegate.deleteUserIcp(userId, domain);
+            ack = usersDelegate.deleteUserIcp(userId, performedBy);
             Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();

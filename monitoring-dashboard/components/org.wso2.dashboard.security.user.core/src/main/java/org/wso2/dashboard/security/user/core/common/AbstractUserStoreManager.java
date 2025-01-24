@@ -58,6 +58,7 @@ import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConf
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG_EX;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.SHARED_GROUPS_ENABLED;
+import static org.wso2.micro.integrator.security.user.core.UserCoreConstants.RealmConfig.READ_GROUPS_ENABLED;
 import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.*;
 
 public abstract class AbstractUserStoreManager implements UserStoreManager {
@@ -1162,13 +1163,15 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
 //                    UserCoreUtil.removeDomainFromName(roleName));
 //        }
 
+        // TODO: sabthar, following logic is redundant and may be wrong. We still need to add the admin role
+        //  to the admin user when initialy setting up the userstore. Bellow logic will prevent this.
         // admin user is always assigned to admin role if it is in primary user store
-        if (
-//                realmConfig.isPrimary() &&
-                roleName.equalsIgnoreCase(realmConfig.getAdminRoleName()) &&
-                userName.equalsIgnoreCase(realmConfig.getAdminUserName())) {
-            return true;
-        }
+//        if (
+////                realmConfig.isPrimary() &&
+//                roleName.equalsIgnoreCase(realmConfig.getAdminRoleName()) &&
+//                userName.equalsIgnoreCase(realmConfig.getAdminUserName())) {
+//            return true;
+//        }
 
         boolean success = false;
         if (readGroupsEnabled) {
@@ -1311,4 +1314,96 @@ UserStore userStore = getUserStore(roleName);
     protected abstract void doDeleteRole(String roleName) throws UserStoreException;
 
 
+    /**
+     * @throws UserStoreException
+     */
+    protected void addInitialAdminData(boolean addAdmin) throws UserStoreException {
+        if (realmConfig.getAdminRoleName() == null || realmConfig.getAdminUserName() == null) {
+            log.error("Admin user name or role name is not valid. Please provide valid values.");
+            throw new UserStoreException(
+                    "Admin user name or role name is not valid. Please provide valid values.");
+        }
+        String adminUserName = realmConfig.getAdminUserName();
+        String adminRoleName = realmConfig.getAdminRoleName();
+        boolean userExist = false;
+        boolean roleExist = false;
+
+        try {
+            if (Boolean.parseBoolean(this.getRealmConfiguration().getUserStoreProperty(READ_GROUPS_ENABLED))) {
+                roleExist = doCheckExistingRole(adminRoleName);
+            }
+        } catch (Exception e) {
+            //ignore
+        }
+
+        try {
+            userExist = doCheckExistingUser(adminUserName);
+        } catch (Exception e) {
+            //ignore
+        }
+
+        if (!userExist) {
+            if (isReadOnly()) {
+
+            } else if (addAdmin) {
+                try {
+                    this.doAddUser(adminUserName, realmConfig.getAdminPassword(),
+                            null, null, null, false);
+                } catch (Exception e) {
+                    String message = "Admin user has not been created. " +
+                            "Error occurs while creating Admin user in primary user store.";
+                    if (log.isDebugEnabled()) {
+                        log.error(message, e);
+                    }
+                }
+            }
+        }
+
+
+        if (!roleExist) {
+            if (addAdmin) {
+                if (!isReadOnly() && writeGroupsEnabled) {
+                    try {
+                        this.doAddRole(adminRoleName, new String[]{adminUserName}, false);
+                    } catch (UserStoreException e) {
+                        String message = "Admin role has not been created. " +
+                                "Error occurs while creating Admin role in primary user store.";
+                       if (log.isDebugEnabled()) {
+                            log.error(message, e);
+                        }
+                    }
+                }
+            } else {
+                String message = "Admin role cannot be created in primary user store. " +
+                        "Add-Admin has been set to false. " +
+                        "Please pick a Role name which exists in the primary user store as Admin Role";
+                if (log.isDebugEnabled()) {
+                    log.error(message);
+                }
+            }
+        }
+
+       if (!isReadOnly() && writeGroupsEnabled) {
+            if (!this.doCheckIsUserInRole(adminUserName, adminRoleName)) {
+                if (addAdmin) {
+                    try {
+                        this.doUpdateRoleListOfUser(adminUserName, null,
+                                new String[]{adminRoleName});
+                    } catch (Exception e) {
+                        String message = "Admin user has not been assigned to Admin role. " +
+                                "Error while assignment is done";
+                        if (log.isDebugEnabled()) {
+                            log.error(message, e);
+                        }
+                    }
+                } else {
+                    String message = "Admin user cannot be assigned to Admin role " +
+                            "Add-Admin has been set to false. Please do the assign it in user store level";
+                    if (log.isDebugEnabled()) {
+                        log.error(message);
+                    }
+                }
+            }
+        }
+    }
 }

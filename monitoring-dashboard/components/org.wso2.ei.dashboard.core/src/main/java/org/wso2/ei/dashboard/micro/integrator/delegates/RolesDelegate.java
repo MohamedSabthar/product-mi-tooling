@@ -35,6 +35,7 @@ import org.checkerframework.checker.units.qual.A;
 import org.json.JSONObject;
 import org.wso2.dashboard.security.user.core.UserStore;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
+import org.wso2.dashboard.security.user.core.common.DataHolder;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
@@ -44,6 +45,7 @@ import org.wso2.ei.dashboard.core.exception.ManagementApiException;
 import org.wso2.ei.dashboard.core.rest.model.*;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
+import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
 import org.wso2.micro.integrator.security.user.api.UserStoreException;
 import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 import scala.util.parsing.combinator.testing.Str;
@@ -433,10 +435,11 @@ public class RolesDelegate {
 
     public Ack deleteRoleIcp(String roleName) throws UserStoreException {
         // TODO: sabthar, introduce super admin config
-//        String adminRole = realmConfig.getAdminRoleName().equalsIgnoreCase(roleName);
-//        if (roleName.equals(adminRole)) {
-//            throw new UserStoreException("Cannot remove the admin role");
-//        }
+        RealmConfiguration realmConfig = DataHolder.getInstance().getRealmConfig();
+        String adminRole = realmConfig.getAdminRoleName();
+        if (roleName.equalsIgnoreCase(adminRole)) {
+            throw new UserStoreException("Cannot remove the admin role");
+        }
         if (log.isDebugEnabled()) {
             log.debug("Requested details for the role: " + roleName);
         }
