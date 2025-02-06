@@ -280,7 +280,7 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    protected void doAddRole(String roleName, String[] userList, boolean shared) throws UserStoreException {
+    protected void doAddRole(String roleName, String[] userList) throws UserStoreException {
         throw new UnsupportedOperationException();
     }
 
@@ -444,11 +444,6 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     protected String[] doGetExternalRoleListOfUser(String s, String s1) throws UserStoreException {
-        return new String[0];
-    }
-
-    @Override
-    protected String[] doGetSharedRoleListOfUser(String s, String s1, String s2) throws UserStoreException {
         return new String[0];
     }
 }

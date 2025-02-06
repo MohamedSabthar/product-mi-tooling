@@ -609,24 +609,6 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
         return getLDAPRoleListOfUser(userName, filter, searchBase, false);
     }
 
-    @Override
-    protected String[] doGetSharedRoleListOfUser(String userName, String tenantDomain, String filter)
-            throws UserStoreException {
-        // Get the effective search base
-        String searchBase = this.getEffectiveSearchBase(true);
-        if (tenantDomain != null && tenantDomain.trim().length() > 0) {
-            if (!Constants.SUPER_TENANT_DOMAIN_NAME.equalsIgnoreCase(tenantDomain.trim())) {
-                String groupNameAttributeName =
-                        realmConfig.getUserStoreProperty(LDAPConstants.SHARED_TENANT_NAME_ATTRIBUTE);
-                if (groupNameAttributeName == null || groupNameAttributeName.trim().length() == 0) {
-                    groupNameAttributeName = "ou";
-                }
-                searchBase = groupNameAttributeName + "=" + tenantDomain + "," + searchBase;
-            }
-        }
-        return getLDAPRoleListOfUser(userName, filter, searchBase, true);
-    }
-
     /**
      * This method will check whether back link support is enabled and will
      * return the effective
@@ -1147,7 +1129,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    protected void doAddRole(String roleName, String[] userList, boolean shared) throws UserStoreException {
+    protected void doAddRole(String roleName, String[] userList) throws UserStoreException {
         throw new UnsupportedOperationException();
     }
 
