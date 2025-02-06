@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Helmet } from "react-helmet";
-import { useLocation } from 'react-router-dom';
+import { useLocation, useHistory } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import AppBar from '@material-ui/core/AppBar';
 import Grid from '@material-ui/core/Grid';
@@ -44,6 +44,7 @@ const styles = (theme) => ({
 });
 
 function Header(props) {
+  const history = useHistory();
   const { classes, onDrawerToggle } = props;
   const location = useLocation();
   const [selected, setSelected] = useState(null);
@@ -72,10 +73,6 @@ function Header(props) {
   const showNodeSelector = () => {
     return !(location.pathname.startsWith("/log-configs") || location.pathname.startsWith("/users") || location.pathname.startsWith("/roles") || location.pathname === "/");
   };
-
-  const updatePassword = () => {
-    window.location.href = "/update-password";
-  }
 
   const handleLogout = () => {
     if (AuthManager.getUser()?.sso) {
@@ -131,6 +128,7 @@ function Header(props) {
                   open={Boolean(anchorEl)}
                   onClose={handlePopOverClose}>
                   <MenuItem onClick={handleLogout}>Logout</MenuItem>
+                  <MenuItem onClick={()=>{history.push("/update-password"); handlePopOverClose();}}>Change Password</MenuItem>
                 </Menu>
               </Popover>
             </Grid>

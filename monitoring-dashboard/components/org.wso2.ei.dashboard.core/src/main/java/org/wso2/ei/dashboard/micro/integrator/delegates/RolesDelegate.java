@@ -29,28 +29,22 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
 import org.wso2.ei.dashboard.core.data.manager.DataManager;
 import org.wso2.ei.dashboard.core.data.manager.DataManagerSingleton;
 import org.wso2.ei.dashboard.core.exception.ManagementApiException;
-import org.wso2.ei.dashboard.core.rest.model.Ack;
-import org.wso2.ei.dashboard.core.rest.model.AddRoleRequest;
-import org.wso2.ei.dashboard.core.rest.model.NodeList;
-import org.wso2.ei.dashboard.core.rest.model.RoleList;
-import org.wso2.ei.dashboard.core.rest.model.RoleListInner;
-import org.wso2.ei.dashboard.core.rest.model.RolesResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.UpdateRoleRequest;
+import org.wso2.ei.dashboard.core.rest.model.*;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
+import org.wso2.micro.integrator.security.user.api.UserStoreException;
+import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Delegate class to handle requests from roles page.
@@ -107,14 +101,12 @@ public class RolesDelegate {
             }
         }
         Comparator<RoleListInner> comparatorObject;
-        switch (orderBy.toLowerCase()) {
-            //for any other ordering options
-            default: comparatorObject = Comparator.comparing(RoleListInner::getRoleName); break;
-        }
+        //for any other ordering options
+        comparatorObject = Comparator.comparing(RoleListInner::getRoleName);
         if ("desc".equalsIgnoreCase(order)) {
-            Collections.sort(roles, comparatorObject.reversed());
+            roles.sort(comparatorObject.reversed());
         } else {
-            Collections.sort(roles, comparatorObject);
+            roles.sort(comparatorObject);
         }
 
         return roles;
@@ -145,6 +137,23 @@ public class RolesDelegate {
         return rolesResourceResponse;
     }
 
+    public RolesResourceResponse getAllRolesIcp() throws UserStoreException {
+        RolesResourceResponse rolesResourceResponse = new RolesResourceResponse();
+        String[] roles = UserStoreManagerUtils.getUserStoreManager().getRoleNames();
+        RoleList roleList = new RoleList();
+        for (String role: roles) {
+            RoleListInner inner = new RoleListInner();
+            inner.setRoleName(role);
+            JsonArray jsonArray = new JsonArray();
+            Arrays.stream(UserStoreManagerUtils.getUserStoreManager().getRoleListOfUser(role)).forEach(jsonArray::add);
+            inner.setDetails(jsonArray.toString());
+            roleList.add(inner);
+        }
+        rolesResourceResponse.setResourceList(roleList);
+        rolesResourceResponse.setCount(roleList.size());
+        return rolesResourceResponse;
+    }
+
     private RoleList getPaginatedRolesResultsFromMI(List<RoleListInner> roles, int lowerLimit, int upperLimit) 
         throws ManagementApiException {
         
@@ -157,10 +166,8 @@ public class RolesDelegate {
                 lowerLimit = upperLimit;
             }
             List<RoleListInner> paginatedList = roles.subList(lowerLimit, upperLimit);
-        
-            for (RoleListInner roleListInner : paginatedList) {
-                resultList.add(roleListInner);
-            }
+
+            resultList.addAll(paginatedList);
             
             return resultList;
 
@@ -188,6 +195,21 @@ public class RolesDelegate {
             ack.setStatus(Constants.SUCCESS_STATUS);
         }
         return ack;
+    }
+
+    public Ack addRoleIcp(AddRoleRequest request) throws UserStoreException {
+//        TODO: sabthar, add debug logs to all ICP
+        UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
+        if (request.getRoleName() != null) {
+            String role = request.getRoleName();
+            if (userStoreManager.isExistingRole(role)) {
+                throw new UserStoreException("The role : " + role + " already exists");
+            }
+            userStoreManager.addRole(role, null, null, false);
+            return new Ack(Constants.SUCCESS_STATUS);
+        } else {
+            throw new UserStoreException("Missing role name in the payload");
+        }
     }
 
     public Ack updateRole(String groupId, UpdateRoleRequest request) throws ManagementApiException {
@@ -238,26 +260,6 @@ public class RolesDelegate {
         return ack;
     }
 
-    private RoleList getRoles(String groupId) throws ManagementApiException {
-        RoleList roleList = new RoleList();
-        NodeList nodeList = dataManager.fetchNodes(groupId);
-        // assumption - In a group, roles in all nodes in the group should be identical
-        String nodeId = nodeList.get(0).getNodeId();
-        String mgtApiUrl = ManagementApiUtils.getMgtApiUrl(groupId, nodeId);
-        String accessToken = dataManager.getAccessToken(groupId, nodeId);
-        String url = mgtApiUrl.concat("roles/");
-        CloseableHttpResponse httpResponse = Utils.doGet(groupId, nodeId, accessToken, url);
-        JsonArray roles = HttpUtils.getJsonResponse(httpResponse).get("list").getAsJsonArray();
-        for (JsonElement role : roles) {
-            String roleId = role.getAsJsonObject().get("role").getAsString();
-            if (!Objects.equals(roleId, Constants.INTERNAL_EVERYONE)) {
-                RoleListInner roleListInner = getRoleDetails(groupId, nodeId, accessToken, url, roleId);
-                roleList.add(roleListInner);
-            }
-        }
-        return roleList;
-    }
-
     private static RoleListInner getRoleDetails(String groupId, String nodeId, String accessToken, String url,
                                          String roleId) throws ManagementApiException {
         RoleListInner roleListInner = new RoleListInner();
@@ -275,6 +277,17 @@ public class RolesDelegate {
         roleDetail = HttpUtils.getStringResponse(roleDetailResponse);
         roleListInner.setDetails(roleDetail);
         return roleListInner;
+    }
+
+    private static RoleListInner getRoleDetailsIcp(String role) throws UserStoreException {
+        RoleListInner inner = new RoleListInner();
+        inner.setRoleName(role);
+        JsonObject rolesObject = new JsonObject();
+        JsonArray jsonArray = new JsonArray();
+        Arrays.stream(UserStoreManagerUtils.getUserStoreManager().getUserListOfRole(role)).forEach(jsonArray::add);
+        rolesObject.add("users", jsonArray);
+        inner.setDetails(rolesObject.toString());
+        return inner;
     }
 
     private JsonObject createAddRolePayload(AddRoleRequest request) {
@@ -302,5 +315,104 @@ public class RolesDelegate {
             log.error("Error occurred while encoding user id " + userId, e);
             return userId;
         }
+    }
+
+    public RolesResourceResponse fetchPaginatedRolesResponseIcp(String searchKey, String lowerLimit, String upperLimit, String order, String orderBy, String isUpdate) throws UserStoreException {
+        String resourceType = Constants.ROLES;
+//        TODO: sabhtar, enable debug log below
+//        DelegatesUtil.logDebugLogs(resourceType, groupId, lowerLimit, upperLimit, order, orderBy, isUpdate);
+        int fromIndex = Integer.parseInt(lowerLimit);
+        int toIndex = Integer.parseInt(upperLimit);
+        boolean isUpdatedContent = Boolean.parseBoolean(isUpdate);
+        String prevResourceType = DelegatesUtil.getPrevResourceType();
+        log.debug("prevSearch key :" + prevSearchKey + ", currentSearch key:" + searchKey);
+        if (isUpdatedContent || prevSearchKey == null || !(prevSearchKey.equals(searchKey))
+                || !(prevResourceType.equals(resourceType))) {
+            searchedList = getSearchedRolesIcp(searchKey, order);
+            count = searchedList.size();
+        }
+        RoleList paginatedList = getPaginatedRolesResultsFromIcp(searchedList, fromIndex, toIndex);
+        RolesResourceResponse rolesResourceResponse = new RolesResourceResponse();
+        rolesResourceResponse.setResourceList(paginatedList);
+        rolesResourceResponse.setCount(count);
+        prevSearchKey = searchKey;
+        DelegatesUtil.setPrevResourceType(resourceType);
+        return rolesResourceResponse;
+    }
+
+    private  List<RoleListInner> getSearchedRolesIcp(String searchKey, String order) throws UserStoreException {
+
+
+        String[] roles = UserStoreManagerUtils.getUserStoreManager().getRoleNames();
+        RoleList roleList = new RoleList();
+        for (String role : roles) {
+            // TODO: sabthar, check if this internal role check is needed
+            if (!Objects.equals(role, Constants.INTERNAL_EVERYONE) && role.toLowerCase().contains(searchKey.toLowerCase())) {
+                RoleListInner roleListInner = getRoleDetailsIcp(role);
+                roleList.add(roleListInner);
+            }
+        }
+        Comparator<RoleListInner> comparatorObject;
+        //for any other ordering options
+        comparatorObject = Comparator.comparing(RoleListInner::getRoleName);
+        if ("desc".equalsIgnoreCase(order)) {
+            roleList.sort(comparatorObject.reversed());
+        } else {
+            roleList.sort(comparatorObject);
+        }
+
+        return roleList;
+    }
+
+    private RoleList getPaginatedRolesResultsFromIcp(List<RoleListInner> roles, int lowerLimit, int upperLimit) {
+
+        RoleList resultList = new RoleList();
+        try {
+            if (roles.size() < upperLimit) {
+                upperLimit = roles.size();
+            }
+            if (upperLimit < lowerLimit) {
+                lowerLimit = upperLimit;
+            }
+            List<RoleListInner> paginatedList = roles.subList(lowerLimit, upperLimit);
+
+            for (RoleListInner roleListInner : paginatedList) {
+                resultList.add(roleListInner);
+            }
+
+            return resultList;
+
+        } catch (IndexOutOfBoundsException e) {
+            log.error("Index values are out of bound", e);
+        } catch (IllegalArgumentException e) {
+            log.error("Illegal arguments for index values", e);
+        }
+        return null;
+    }
+
+    public Ack updateRoleIcp(UpdateRoleRequest request) throws UserStoreException {
+        UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
+        if (userStoreManager.isExistingUser(request.getUserId())) {
+            throw new UserStoreException("The user : " + request.getUserId() + " does not exists");
+        }
+        userStoreManager.updateRoleListOfUser(request.getUserId() ,request.getRemovedRoles().toArray(new String[0]) ,request.getAddedRoles().toArray(new String[0]));
+        Ack ack = new Ack(Constants.SUCCESS_STATUS);
+        return ack;
+    }
+
+    public Ack deleteRoleIcp(String roleName) throws UserStoreException {
+        if (UserStoreManagerUtils.isAdminRole(roleName)) {
+            throw new UserStoreException("Cannot remove the admin role");
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Requested details for the role: " + roleName);
+        }
+        UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
+        if (userStoreManager.isExistingRole(roleName)) {
+            userStoreManager.deleteRole(roleName);
+        } else {
+            throw new UserStoreException("Role: " + roleName + " cannot be found.");
+        }
+        return new Ack(Constants.SUCCESS_STATUS);
     }
 }

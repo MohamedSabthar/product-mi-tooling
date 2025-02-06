@@ -7,11 +7,15 @@ import Select from '@material-ui/core/Select';
 import { changeGroup, selectGroup } from '../redux/Actions';
 import { useDispatch, useSelector } from 'react-redux';
 import HTTPClient from '../utils/HTTPClient';
+import { useLocation } from "react-router-dom";
+
+const ICP_NAME = window.icp.name;
 
 export default function GroupSelector() {
 
     const [groupList, setGroupList] = React.useState([]);
     const dispatch = useDispatch();
+    const location = useLocation();
 
     React.useEffect(() => {
         let groups = [];
@@ -31,6 +35,18 @@ export default function GroupSelector() {
         })
     }, [])
 
+    React.useEffect(() => {
+      setGroupList((prevGroups) => {
+        const filteredGroups = prevGroups.filter(
+          (group) => group.label !== ICP_NAME
+        );
+        return location.pathname.startsWith("/users") ||
+          location.pathname.startsWith("/roles")
+          ? [...filteredGroups, { label: ICP_NAME, value: ICP_NAME }]
+          : filteredGroups;
+      });
+    }, [location]);
+
     return (
         <SelectComponent groupList={groupList} />
     );
@@ -44,6 +60,7 @@ function loadNodesForGroup(group, dispatch) {
 }
 
 function SelectComponent(props) {
+    const location = useLocation();
     const classes = useStyles();
     var options = props.groupList;
 
@@ -51,11 +68,20 @@ function SelectComponent(props) {
 
     const globalGroupId = useSelector(state => state.groupId);
 
-    React.useEffect(()=>{
-        if (globalGroupId === '' && options.length !== 0) {
-            setselectedGroupId(options[0].value)
-        }
-    },[props.groupList]);
+    React.useEffect(() => {
+      if (
+        globalGroupId === ICP_NAME &&
+        !(
+          location.pathname.startsWith("/users") ||
+          location.pathname.startsWith("/roles")
+        )
+      ) {
+        setselectedGroupId(options[0].value);
+        changeSelectedGroupId(options[0].value);
+      } else if (globalGroupId === "" && options.length !== 0) {
+        setselectedGroupId(options[0].value);
+      }
+    }, [props.groupList]);
 
     const changeSelectedGroupId = (groupId) => {
         loadNodesForGroup(groupId, dispatch)

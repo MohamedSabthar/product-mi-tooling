@@ -23,10 +23,9 @@ import net.minidev.json.JSONObject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
-import org.wso2.dashboard.security.user.core.common.Secret;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.auth.TokenCache;
-import org.wso2.ei.dashboard.core.commons.auth.TokenGenerator;
+import org.wso2.ei.dashboard.core.commons.auth.JwtUtil;
 
 import javax.ws.rs.core.NewCookie;
 import javax.ws.rs.core.Response;
@@ -45,8 +44,8 @@ public class LoginDelegate {
             boolean isAuthenticated = UserStoreManagerUtils.getUserStoreManager().authenticate(username, password);
             if (isAuthenticated) {
                 logger.info(String.format("User %s logged in successfully", username));
-                String scope = UserStoreManagerUtils.isAdmin(username) ? "admin" : "default";
-                String accessToken = TokenGenerator.generateToken(username, scope);
+                String scope = UserStoreManagerUtils.isAdminUser(username) ? "admin" : "default";
+                String accessToken = JwtUtil.generateToken(username, scope);
                 storeTokenInCache(accessToken);
                 return Response.ok(getUserInfo(username, scope)).header(Constants.COOKIE_HEADER,
                                        getTokenCookieHeader(accessToken, NewCookie.DEFAULT_MAX_AGE)).build();
