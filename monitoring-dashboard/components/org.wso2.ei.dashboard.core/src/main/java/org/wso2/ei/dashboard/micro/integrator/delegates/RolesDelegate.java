@@ -346,8 +346,7 @@ public class RolesDelegate {
         String[] roles = UserStoreManagerUtils.getUserStoreManager().getRoleNames();
         RoleList roleList = new RoleList();
         for (String role : roles) {
-            // TODO: sabthar, check if this internal role check is needed
-            if (!Objects.equals(role, Constants.INTERNAL_EVERYONE) && role.toLowerCase().contains(searchKey.toLowerCase())) {
+            if (role.toLowerCase().contains(searchKey.toLowerCase())) {
                 RoleListInner roleListInner = getRoleDetailsIcp(role);
                 roleList.add(roleListInner);
             }

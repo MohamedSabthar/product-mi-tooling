@@ -71,6 +71,7 @@ function SelectComponent(props) {
     React.useEffect(() => {
       if (
         globalGroupId === ICP_NAME &&
+        options.length > 0 &&
         !(
           location.pathname.startsWith("/users") ||
           location.pathname.startsWith("/roles")
@@ -79,15 +80,19 @@ function SelectComponent(props) {
         setselectedGroupId(options[0].value);
         changeSelectedGroupId(options[0].value);
       } else if (globalGroupId === "" && options.length !== 0) {
-        setselectedGroupId(options[0].value);
+        changeSelectedGroupId(options[0].value);
       }
     }, [props.groupList]);
 
     const changeSelectedGroupId = (groupId) => {
-        loadNodesForGroup(groupId, dispatch)
-        dispatch(changeGroup(groupId))
-        setselectedGroupId(groupId)
-    }
+      if (groupId === ICP_NAME) {
+        dispatch(selectGroup(groupId, []));
+      } else {
+        loadNodesForGroup(groupId, dispatch);
+      }
+      dispatch(changeGroup(groupId));
+      setselectedGroupId(groupId);
+    };
 
     const dispatch = useDispatch();
     return <FormControl style={{ width: 150 }}>

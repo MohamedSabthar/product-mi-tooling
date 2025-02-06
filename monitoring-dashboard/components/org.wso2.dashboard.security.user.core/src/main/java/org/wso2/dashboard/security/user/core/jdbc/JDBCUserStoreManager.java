@@ -1022,9 +1022,6 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         }
     }
 
-
-
-    // TODO: sabthar, what is this shared role ?
     protected void doAddSharedRole(String roleName, String[] userList) throws UserStoreException {
 
         Connection dbConnection = null;

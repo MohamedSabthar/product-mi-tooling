@@ -217,8 +217,6 @@ public class UsersDelegate {
         if (log.isDebugEnabled()) {
             log.debug("Request received to update user credentials: " + user);
         }
-        // TODO: sabthar, set the performed by user from request context. This need to set from security handler/Authentication filter
-//        String performedBy =  Utils.getStringPropertyFromMessageContext(messageContext, USERNAME_PROPERTY);
         if (Objects.isNull(performedBy)) {
             log.warn(
                     "Update a user without authenticating/authorizing the request sender. Adding "

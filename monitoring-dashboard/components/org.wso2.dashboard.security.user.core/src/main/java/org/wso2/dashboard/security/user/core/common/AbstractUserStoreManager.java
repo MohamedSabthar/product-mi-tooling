@@ -32,10 +32,6 @@ import org.wso2.micro.integrator.security.user.core.claim.ClaimManager;
 import org.wso2.micro.integrator.security.user.core.claim.ClaimMapping;
 import org.wso2.micro.integrator.security.user.core.common.RoleContext;
 import org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants;
-import org.wso2.micro.integrator.security.user.core.hybrid.HybridRoleManager;
-import org.wso2.micro.integrator.security.user.core.internal.UMListenerServiceComponent;
-import org.wso2.micro.integrator.security.user.core.listener.SecretHandleableListener;
-import org.wso2.micro.integrator.security.user.core.listener.UserOperationEventListener;
 import org.wso2.micro.integrator.security.user.core.multiplecredentials.UserAlreadyExistsException;
 import org.wso2.micro.integrator.security.user.core.util.UserCoreUtil;
 
@@ -43,15 +39,10 @@ import javax.sql.DataSource;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.wso2.dashboard.security.user.core.UserStoreConstants.REGISTRY_SYSTEM_USERNAME;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.LEADING_OR_TRAILING_SPACE_ALLOWED_IN_USERNAME;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_JAVA_REG_EX;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_USER_NAME_JAVA_REG;
@@ -69,7 +60,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     protected RealmConfiguration realmConfig = null;
     protected ClaimManager claimManager = null;
     protected UserRealm userRealm = null;
-    protected HybridRoleManager hybridRoleManager = null;
     protected boolean readGroupsEnabled = false;
     protected boolean writeGroupsEnabled = false;
 
@@ -87,8 +77,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
 
     private boolean authenticateInternal(String username, Object credential) throws UserStoreException {
         try (Secret credentialObj = Secret.getSecret(credential)) {
-            boolean authenticated = this.doAuthenticate(username, credentialObj);
-            if (authenticated) {
+            if (doAuthenticate(username, credentialObj)) {
                 return true;
             }
         } catch (UnsupportedSecretTypeException e) {
@@ -170,11 +159,9 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     }
 
     public final String[] doGetRoleListOfUser(String username, String filter) throws UserStoreException {
-        // TODO: sabthar, what is this read groups and shared groups
         if (!readGroupsEnabled) {
             return new String[0];
         }
-
         List<String> roles = new ArrayList<>();
         String[] externalRoles = doGetExternalRoleListOfUser(username, filter);
         if (externalRoles != null) {
@@ -189,7 +176,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         return roles.toArray(new String[0]);
     }
 
-    // TODO: sabthar, what is this shared group
     public boolean isSharedGroupEnabled() {
         try {
             String value = realmConfig.getUserStoreProperty(SHARED_GROUPS_ENABLED);
@@ -224,8 +210,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      * {@inheritDoc}
      */
     public final String[] getUserListOfRole(String roleName) throws UserStoreException {
-
-
         String[] usernames = new String[0];
 
         // If role does not exit, just return
@@ -233,11 +217,9 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
             return usernames;
         }
 
-
         if (readGroupsEnabled) {
             usernames = doGetUserListOfRole(roleName, "*");
         }
-
         return usernames;
     }
 
@@ -259,7 +241,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
             throw new UserStoreException(errorCode + " - " + message);
         }
 
-        try (Secret credentialObj = Secret.getSecret(credential);) {
+        try (Secret credentialObj = Secret.getSecret(credential)) {
             if (isReadOnly()) {
                 throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
             }
@@ -289,36 +271,19 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                 String regEx = realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_JAVA_REG_EX);
                 String message = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getMessage(), regEx);
                 String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getCode();
-
                 throw new UserStoreException(errorCode + " - " + message);
             }
 
             if (doCheckExistingUser(username)) {
                 String message = String.format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_USER_ALREADY_EXISTS.getMessage(), username);
                 String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_USER_ALREADY_EXISTS.getCode();
-
                 throw new UserAlreadyExistsException(errorCode + " - " + message);
             }
 
-            List<String> internalRoles = new ArrayList<>();
             List<String> externalRoles = new ArrayList<>();
-//            int index;
-            if (roleList != null) {
-                for (String role : roleList) {
-                    if (role != null && role.trim().length() > 0) {
-                        externalRoles.add(role); // TODO: sabthar, added for testing
-                    }
-                }
-            }
-
-            // check existence of roles and claims before adding user
-            for (String internalRole : internalRoles) {
-                if (!hybridRoleManager.isExistingRole(internalRole)) {
-                    String message = String
-                            .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INTERNAL_ROLE_NOT_EXISTS.getMessage(), internalRole);
-                    String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INTERNAL_ROLE_NOT_EXISTS.getCode();
-
-                    throw new UserStoreException(errorCode + " - " + message);
+            for (String role : roleList) {
+                if (role != null && !role.trim().isEmpty()) {
+                    externalRoles.add(role); // TODO: sabthar, added for testing
                 }
             }
 
@@ -332,60 +297,31 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                 }
             }
 
-            if (claims != null) {
-                for (Map.Entry<String, String> entry : claims.entrySet()) {
-                    ClaimMapping claimMapping;
-                    try {
-                        claimMapping = (ClaimMapping) claimManager.getClaimMapping(entry.getKey());
-                    } catch (org.wso2.micro.integrator.security.user.api.UserStoreException e) {
-                        String errorMessage = String
-                                .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getMessage(),
-                                        "persisting user attributes.");
-                        String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getCode();
-                        throw new UserStoreException(errorCode + " - " + errorMessage, e);
-                    }
-                    if (claimMapping == null) {
-                        String errorMessage = String
-                                .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_CLAIM_URI.getMessage(), entry.getKey());
-                        String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_CLAIM_URI.getCode();
+            for (Map.Entry<String, String> entry : claims.entrySet()) {
+                ClaimMapping claimMapping;
+                try {
+                    claimMapping = (ClaimMapping) claimManager.getClaimMapping(entry.getKey());
+                } catch (org.wso2.micro.integrator.security.user.api.UserStoreException e) {
+                    String errorMessage = String
+                            .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getMessage(),
+                                    "persisting user attributes.");
+                    String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getCode();
+                    throw new UserStoreException(errorCode + " - " + errorMessage, e);
+                }
+                if (claimMapping == null) {
+                    String errorMessage = String
+                            .format(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_CLAIM_URI.getMessage(), entry.getKey());
+                    String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_INVALID_CLAIM_URI.getCode();
 
-                        throw new UserStoreException(errorCode + " - " + errorMessage);
-                    }
+                    throw new UserStoreException(errorCode + " - " + errorMessage);
                 }
             }
 
-            try {
-                doAddUser(username, credentialObj, externalRoles.toArray(new String[externalRoles.size()]), claims,
-                        profileName, requirePasswordChange);
-            } catch (UserStoreException ex) {
 
-                throw ex;
-            }
+            doAddUser(username, credentialObj, externalRoles.toArray(new String[0]), claims,
+                    profileName, requirePasswordChange);
 
-            if (internalRoles.size() > 0) {
-                hybridRoleManager.updateHybridRoleListOfUser(username, null,
-                        internalRoles.toArray(new String[internalRoles.size()]));
-            }
 
-            try {
-                for (UserOperationEventListener listener : UMListenerServiceComponent
-                        .getUserOperationEventListeners()) {
-                    Object credentialArgument;
-                    if (listener instanceof SecretHandleableListener) {
-                        credentialArgument = credentialObj;
-                    } else {
-                        credentialArgument = credential;
-                    }
-
-                    if (!listener.doPostAddUser(username, credentialArgument, roleList, claims, profileName, this)) {
-
-                        return;
-                    }
-                }
-            } catch (UserStoreException ex) {
-
-                throw ex;
-            }
         } catch (UnsupportedSecretTypeException e) {
             throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString(), e);
         }
@@ -393,11 +329,9 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     }
 
     protected boolean isValidUsername(String username) {
-        // TODO: sabthar, what is this registry system username
-        if ((username == null) || REGISTRY_SYSTEM_USERNAME.equals(username)) {
+        if (username == null) {
             return false;
         }
-
         String allowLeadingOrTrailingSpace = realmConfig.getUserStoreProperty(LEADING_OR_TRAILING_SPACE_ALLOWED_IN_USERNAME);
         if (StringUtils.isEmpty(allowLeadingOrTrailingSpace)) {
             // Keeping old behavior for backward-compatibility.
@@ -440,7 +374,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         if (credential == null) {
             return false;
         }
-
         try (Secret credentialObj = Secret.getSecret(credential)) {
             if (credentialObj.getChars().length < 1) {
                 return false;
@@ -594,17 +527,10 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                 String errorCode = UserCoreErrorConstants.ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getCode();
                 throw new UserStoreException(errorCode + "-" + errorMessage);
             }
-
-            try {
-                doUpdateCredentialByAdmin(username, newCredentialObj);
-            } catch (UserStoreException ex) {
-                throw ex;
-            }
+            doUpdateCredentialByAdmin(username, newCredentialObj);
         } finally {
             newCredentialObj.clear();
         }
-        // #################### </Listeners> #####################################################
-
     }
 
     /**
@@ -647,41 +573,27 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      * @throws UserStoreException
      */
     public final void deleteRole(String roleName) throws UserStoreException {
-
-
         if (realmConfig.getAdminRoleName().equalsIgnoreCase(roleName)) {
             throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_DELETE_ADMIN_ROLE.toString());
         }
-
         if (!doCheckExistingRole(roleName)) {
             throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_DELETE_NON_EXISTING_ROLE.toString());
         }
-
-
         if (isReadOnly()) {
             throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
         }
-
         if (!writeGroupsEnabled) {
             throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_WRITE_GROUPS_NOT_ENABLED.toString());
         }
-        try {
-            doDeleteRole(roleName);
-        } catch (UserStoreException ex) {
-            throw ex;
-        }
-
+        doDeleteRole(roleName);
     }
 
     public final void updateRoleListOfUser(final String username, final String[] deletedRoles, final String[] newRoles)
             throws UserStoreException {
         try {
-            AccessController.doPrivileged(new PrivilegedExceptionAction<String>() {
-                @Override
-                public String run() throws Exception {
-                    updateRoleListOfUserInternal(username, deletedRoles, newRoles);
-                    return null;
-                }
+            AccessController.doPrivileged((PrivilegedExceptionAction<String>) () -> {
+                updateRoleListOfUserInternal(username, deletedRoles, newRoles);
+                return null;
             });
         } catch (PrivilegedActionException e) {
             throw (UserStoreException) e.getException();
@@ -691,12 +603,15 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     /**
      * {@inheritDoc}
      */
-    private final void updateRoleListOfUserInternal(String username, String[] deletedRoles, String[] newRoles)
+    private void updateRoleListOfUserInternal(String username, String[] deletedRoles, String[] newRoles)
             throws UserStoreException {
+        deletedRoles = deletedRoles != null ? deletedRoles : new String[0];
+        newRoles = newRoles != null ? newRoles : new String[0];
 
-
-        if (deletedRoles != null && deletedRoles.length > 0) {
+        if (deletedRoles.length > 0) {
             Arrays.sort(deletedRoles);
+
+            // Prevent removing the admin role from the admin user
             if (realmConfig.getAdminUserName().equals(username)) {
                 for (String deletedRole : deletedRoles) {
                     if (deletedRole.equalsIgnoreCase(realmConfig.getAdminRoleName())) {
@@ -705,78 +620,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                 }
             }
         }
-
-        if (deletedRoles == null) {
-            deletedRoles = new String[0];
-        }
-        if (newRoles == null) {
-            newRoles = new String[0];
-        }
-
-        List<String> roleDel = new ArrayList<String>();
-        List<String> roleNew = new ArrayList<String>();
-
-        if (deletedRoles.length > 0) {
-            for (String deleteRole : deletedRoles) {
-//                TODO: sabthar, what is this is everyone role
-//                if (UserCoreUtil.isEveryoneRole(deleteRole, realmConfig)) {
-//                    handleUpdateRoleListOfUserFailure(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.getCode(),
-//                            UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.getMessage(), username, deletedRoles,
-//                            newRoles);
-//                    throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.toString());
-//                }
-//                String domain = null;
-//                int index1 = deleteRole.indexOf(UserCoreConstants.DOMAIN_SEPARATOR);
-//                if (index1 > 0) {
-//                    domain = deleteRole.substring(0, index1);
-//                }
-//                if (APPLICATION_DOMAIN.equalsIgnoreCase(domain) || WORKFLOW_DOMAIN.equalsIgnoreCase(domain)) {
-//                    internalRoleDel.add(deleteRole);
-//                } else if (UserCoreConstants.INTERNAL_DOMAIN.equalsIgnoreCase(domain) || this.isReadOnly()) {
-//                    internalRoleDel.add(UserCoreUtil.removeDomainFromName(deleteRole));
-//                } else {
-                // This is domain free role name.
-                roleDel.add(deleteRole);
-//                }
-            }
-            deletedRoles = roleDel.toArray(new String[roleDel.size()]);
-        }
-
-        if (newRoles.length > 0) {
-            for (String newRole : newRoles) {
-//                if (UserCoreUtil.isEveryoneRole(newRole, realmConfig)) {
-//                    handleUpdateRoleListOfUserFailure(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.getCode(),
-//                            UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.getMessage(), username, deletedRoles,
-//                            newRoles);
-//                    throw new UserStoreException(UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_UPDATE_EVERYONE_ROLE.toString());
-//                }
-//                String domain = null;
-//                int index2 = newRole.indexOf(UserCoreConstants.DOMAIN_SEPARATOR);
-//                if (index2 > 0) {
-//                    domain = newRole.substring(0, index2);
-//                }
-//
-//                if (UserCoreConstants.INTERNAL_DOMAIN.equalsIgnoreCase(domain)) {
-//                    // If this is an internal role.
-//                    internalRoleNew.add(UserCoreUtil.removeDomainFromName(newRole));
-//                } else if (APPLICATION_DOMAIN.equalsIgnoreCase(domain) || WORKFLOW_DOMAIN.equalsIgnoreCase(domain)) {
-//                    // If this is an application role or workflow role.
-//                    internalRoleNew.add(newRole);
-//                } else if (this.isReadOnly()) {
-//                    // If this is a readonly user store, we add even normal roles as internal roles.
-//                    internalRoleNew.add(UserCoreUtil.removeDomainFromName(newRole));
-//                } else {
-                roleNew.add(newRole);
-//                }
-            }
-            newRoles = roleNew.toArray(new String[roleNew.size()]);
-        }
-
-//        if (internalRoleDel.size() > 0 || internalRoleNew.size() > 0) {
-//            hybridRoleManager.updateHybridRoleListOfUser(userStore.getDomainFreeName(),
-//                    internalRoleDel.toArray(new String[internalRoleDel.size()]),
-//                    internalRoleNew.toArray(new String[internalRoleNew.size()]));
-//        }
 
         if (deletedRoles.length > 0 || newRoles.length > 0) {
             if (!isReadOnly() && writeGroupsEnabled) {
@@ -840,7 +683,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
             throws UserStoreException {
 
         String[] roleList = new String[0];
-        // TODO: sabhtar, what is this read group
         if (readGroupsEnabled) {
             String[] externalRoles = doGetRoleNames(filter, maxItemLimit);
             roleList = UserCoreUtil.combineArrays(externalRoles, roleList);
@@ -908,7 +750,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         }
 
 //        String roleWithDomain = null;
-        // TODO: sabhtar, what is this write gropus
         if (writeGroupsEnabled) {
             try {
                 // add role in to actual user store

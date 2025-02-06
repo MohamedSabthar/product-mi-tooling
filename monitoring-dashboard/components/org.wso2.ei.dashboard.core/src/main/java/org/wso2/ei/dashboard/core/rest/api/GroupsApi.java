@@ -1143,9 +1143,6 @@ public class GroupsApi {
         return responseBuilder.build();
     }
 
-    // TODO: sabthar, check whether these resources needs to be authorized only for admin
-    // TODO: sabthar, see Authentication filter there isAdminResource is used to authorized
-    // cross check all the resources are in the isAdminResource list
     @POST
     @Path("/{group-id}/roles")
     @Consumes({"application/json"})
