@@ -179,7 +179,7 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    protected String[] doGetUserListOfRole(String roleName, String filter) throws UserStoreException {
+    protected String[] doGetUserListOfRole(String roleName) throws UserStoreException {
         throw new UnsupportedOperationException();
     }
 

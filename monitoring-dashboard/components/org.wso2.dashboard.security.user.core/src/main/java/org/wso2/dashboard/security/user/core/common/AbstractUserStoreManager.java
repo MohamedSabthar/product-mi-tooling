@@ -104,7 +104,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      */
     protected abstract boolean doAuthenticate(String username, Object credential) throws UserStoreException;
 
-    private void logDebug(String message) {
+    private static void logDebug(String message) {
         if (log.isDebugEnabled()) {
             log.debug(message);
         }
@@ -174,10 +174,10 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         if (!isExistingRole(roleName)) {
             return new String[0];
         }
-        return readGroupsEnabled ? doGetUserListOfRole(roleName, "*") : new String[0];
+        return readGroupsEnabled ? doGetUserListOfRole(roleName) : new String[0];
     }
 
-    protected abstract String[] doGetUserListOfRole(String roleName, String filter) throws UserStoreException;
+    protected abstract String[] doGetUserListOfRole(String roleName) throws UserStoreException;
 
     @Override
     public void addUser(String username, Object credential, String[] roles, Map<String, String> claims,
@@ -322,7 +322,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     }
 
     private String getEffectiveUsernameRegex() {
-        // TODO: sabthar, check all realm property and check whether they can break due to null pointer
         String regex = realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_USER_NAME_JAVA_REG_EX);
         if (StringUtils.isEmpty(regex) || StringUtils.isEmpty(regex.trim())) {
             regex = realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_USER_NAME_JAVA_REG);
@@ -508,7 +507,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     /**
      * Update role list of a particular user
      *
-     * @param username     The user name
+     * @param username     The username
      * @param deletedRoles Array of role names, that is going to be removed from the user
      * @param newRoles     Array of role names, that is going to be added to the user
      * @throws UserStoreException An unexpected exception has occurred
@@ -517,7 +516,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                                                    String[] newRoles) throws UserStoreException;
 
     @Override
-    public final String[] getHybridRoles() throws UserStoreException {
+    public final String[] getHybridRoles() {
         throw new UnsupportedOperationException();
     }
 
@@ -526,7 +525,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     /**
      * Update credential/password by the admin of another user
      *
-     * @param username      The user name
+     * @param username      The username
      * @param newCredential The new credential
      * @throws UserStoreException An unexpected exception has occurred
      */
@@ -535,7 +534,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     /**
      * Update the credential/password of the user
      *
-     * @param username      The user name
+     * @param username      The username
      * @param newCredential The new credential/password
      * @param oldCredential The old credential/password
      * @throws UserStoreException An unexpected exception has occurred
