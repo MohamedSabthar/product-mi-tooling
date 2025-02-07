@@ -239,7 +239,7 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1, boolean b) throws UserStoreException {
+    public void addUser(String s, Object o, String[] roles, Map<String, String> map, String s1, boolean b) throws UserStoreException {
         throw new UnsupportedOperationException();
     }
 

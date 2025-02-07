@@ -1088,7 +1088,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1, boolean b) throws UserStoreException {
+    public void addUser(String s, Object o, String[] roles, Map<String, String> map, String s1, boolean b) throws UserStoreException {
 
     }
 
@@ -1124,7 +1124,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public void addRole(String s, String[] strings, Permission[] permissions, boolean b) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
+    public void addRole(String s, String[] strings, Permission[] permissions, boolean b) throws UserStoreException {
 
     }
 
