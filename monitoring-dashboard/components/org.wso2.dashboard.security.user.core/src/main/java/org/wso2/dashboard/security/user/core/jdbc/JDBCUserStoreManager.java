@@ -669,20 +669,12 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
     /**
      * Break the provided role list based on whether roles are shared or not
      */
-    // TODO: check whther this function is needed since removed the shared role break down
+    // TODO: check whether this function is needed since removed the shared role break down
     private RoleBreakdown getSharedRoleBreakdown(String[] rolesList) {
         List<String> roles = new ArrayList<>();
         List<Integer> tenantIds = new ArrayList<>();
-
         for (String role : rolesList) {
             if (StringUtils.isNotEmpty(role)) {
-//                String[] deletedRoleNames = role.split(UserCoreConstants.DOMAIN_SEPARATOR);
-                // TODO: sabthar, fix this temporary domain name seperator
-                String[] deletedRoleNames = role.split("/");
-                if (deletedRoleNames.length > 1) {
-                    role = deletedRoleNames[1];
-                }
-
                 JDBCRoleContext ctx = (JDBCRoleContext) createRoleContext(role);
                 roles.add(ctx.getRoleName());
                 tenantIds.add(ctx.getTenantId());
@@ -694,52 +686,36 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         return breakdown;
     }
 
-    /**
-     *
-     */
     public void doDeleteRole(String roleName) throws UserStoreException {
-
-        String sqlStmt1 = realmConfig
-                .getUserStoreProperty(JDBCRealmConstants.ON_DELETE_ROLE_REMOVE_USER_ROLE);
+        String sqlStmt1 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ON_DELETE_ROLE_REMOVE_USER_ROLE);
         if (sqlStmt1 == null) {
             throw new UserStoreException("The sql statement for delete user-role mapping is null");
         }
-
         String sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.DELETE_ROLE);
         if (sqlStmt2 == null) {
             throw new UserStoreException("The sql statement for delete role is null");
         }
-
         Connection dbConnection = null;
         try {
             dbConnection = getDBConnection();
             if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, roleName, tenantId,
-                        tenantId);
+                this.updateStringValuesToDatabase(dbConnection, sqlStmt1, roleName, tenantId, tenantId);
                 this.updateStringValuesToDatabase(dbConnection, sqlStmt2, roleName, tenantId);
             } else {
                 this.updateStringValuesToDatabase(dbConnection, sqlStmt1, roleName);
                 this.updateStringValuesToDatabase(dbConnection, sqlStmt2, roleName);
             }
-            //this.userRealm.getAuthorizationManager().clearRoleAuthorization(roleName);
             dbConnection.commit();
         } catch (SQLException e) {
-            String msg = "Error occurred while deleting role : " + roleName;
-            if (log.isDebugEnabled()) {
-                log.debug(msg, e);
-            }
-            throw new UserStoreException(msg, e);
+            String message = "Error occurred while deleting role : " + roleName;
+            logDebug(message, e);
+            throw new UserStoreException(message, e);
         } finally {
-            DatabaseUtil.closeAllConnections(dbConnection);
+            DatabaseUtil.closeConnection(dbConnection);
         }
     }
 
-    /**
-     *
-     */
-    public void doUpdateCredentialByAdmin(String userName, Object newCredential)
-            throws UserStoreException {
-
+    public void doUpdateCredentialByAdmin(String userName, Object newCredential) throws UserStoreException {
         String sqlStmt;
         if (isCaseSensitiveUsername()) {
             sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.UPDATE_USER_PASSWORD);
@@ -771,20 +747,10 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         }
     }
 
-    public void doUpdateCredential(String userName, Object newCredential, Object oldCredential)
-            throws UserStoreException {
-        // no need to check old password here because we already authenticate in super class
-        // if (this.authenticate(userName, oldCredential)) {
+    public void doUpdateCredential(String userName, Object newCredential, Object oldCredential) throws UserStoreException {
         this.doUpdateCredentialByAdmin(userName, newCredential);
-        /*
-         * } else { log.error("Wrong username/password provided"); throw new
-         * UserStoreException("Wrong username/password provided"); }
-         */
     }
 
-    /**
-     *
-     */
     @Override
     public String[] doGetRoleNames(String filter, int maxItemLimit) throws UserStoreException {
 
