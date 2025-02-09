@@ -697,4 +697,9 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
             log.error("Error while assigning admin user to admin role.", e);
         }
     }
+
+    @Override
+    public boolean isExistingUser(String username) throws UserStoreException {
+        return this.doCheckExistingUser(username);
+    }
 }
