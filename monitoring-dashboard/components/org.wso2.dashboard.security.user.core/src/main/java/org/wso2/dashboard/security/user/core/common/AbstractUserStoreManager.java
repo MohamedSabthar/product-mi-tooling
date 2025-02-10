@@ -64,14 +64,15 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     protected boolean writeGroupsEnabled = false;
 
     @Override
-    public boolean authenticate(final String username, final Object credential) {
+    public boolean authenticate(final String username, final Object credential) throws UserStoreException {
         try {
             return AccessController.doPrivileged((PrivilegedExceptionAction<Boolean>) () -> {
                 validateUsernameAndCredentialPresence(username, credential);
                 return authenticateInternal(username, credential);
             });
         } catch (PrivilegedActionException e) {
-            throw new RuntimeException("Error during authentication", e);
+            handlePrivilegedActionException(e);
+            return false;
         }
     }
 
@@ -348,8 +349,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         }
     }
 
-    protected abstract boolean doCheckExistingUser(String username) throws UserStoreException;
-
     /**
      * Adds a user to the user store.
      *
@@ -562,6 +561,15 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     protected abstract String[] doGetRoleNames(String filter, int maxItemLimit) throws UserStoreException;
 
     protected abstract boolean doCheckExistingRole(String roleName) throws UserStoreException;
+
+    protected abstract boolean doCheckExistingUser(String username) throws UserStoreException;
+
+    private void handlePrivilegedActionException(PrivilegedActionException exception) throws UserStoreException {
+        if (exception.getCause() instanceof DashboardUserStoreException) {
+            throw (DashboardUserStoreException) exception.getCause();
+        }
+        throw new UserStoreException(ERROR_CODE_ERROR_WHILE_AUTHENTICATION.getMessage(), exception.getCause());
+    }
 
     protected abstract RoleContext createRoleContext(String roleName) throws UserStoreException;
 
