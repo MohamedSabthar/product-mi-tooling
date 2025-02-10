@@ -28,7 +28,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.config.mapper.ConfigParser;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
@@ -36,28 +35,7 @@ import org.wso2.ei.dashboard.core.exception.ManagementApiException;
 import org.wso2.ei.dashboard.core.rest.annotation.Secured;
 import org.wso2.ei.dashboard.core.rest.delegates.groups.GroupDelegate;
 import org.wso2.ei.dashboard.core.rest.delegates.nodes.NodesDelegate;
-import org.wso2.ei.dashboard.core.rest.model.Ack;
-import org.wso2.ei.dashboard.core.rest.model.AddRoleRequest;
-import org.wso2.ei.dashboard.core.rest.model.AddUserRequest;
-import org.wso2.ei.dashboard.core.rest.model.ArtifactUpdateRequest;
-import org.wso2.ei.dashboard.core.rest.model.ArtifactsResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.CAppArtifacts;
-import org.wso2.ei.dashboard.core.rest.model.DatasourceList;
-import org.wso2.ei.dashboard.core.rest.model.Error;
-import org.wso2.ei.dashboard.core.rest.model.GroupList;
-import org.wso2.ei.dashboard.core.rest.model.LocalEntryValue;
-import org.wso2.ei.dashboard.core.rest.model.LogConfigAddRequest;
-import org.wso2.ei.dashboard.core.rest.model.LogConfigUpdateRequest;
-import org.wso2.ei.dashboard.core.rest.model.LogConfigsResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.NodeList;
-import org.wso2.ei.dashboard.core.rest.model.NodesResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.PasswordRequest;
-import org.wso2.ei.dashboard.core.rest.model.RegistryArtifacts;
-import org.wso2.ei.dashboard.core.rest.model.RegistryProperty;
-import org.wso2.ei.dashboard.core.rest.model.RegistryResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.LogsResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.RolesResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.SuccessStatus;
+import org.wso2.ei.dashboard.core.rest.model.*;
 
 import java.io.File;
 
@@ -75,8 +53,7 @@ import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 
-import org.wso2.ei.dashboard.core.rest.model.UpdateRoleRequest;
-import org.wso2.ei.dashboard.core.rest.model.UsersResourceResponse;
+import org.wso2.ei.dashboard.core.rest.model.Error;
 import org.wso2.ei.dashboard.micro.integrator.delegates.ApisDelegate;
 import org.wso2.ei.dashboard.micro.integrator.delegates.CarbonAppsDelegate;
 import org.wso2.ei.dashboard.micro.integrator.delegates.ConnectorsDelegate;
@@ -109,8 +86,6 @@ import javax.validation.Valid;
 
 @javax.annotation.Generated(value = "io.swagger.codegen.v3.generators.java.JavaJAXRSSpecServerCodegen", date = "2020-12-15T14:16:00.637+05:30[Asia/Colombo]")
 public class GroupsApi {
-    private static final String ICP_DEFAULT_NAME = "icp";
-    private static final String ICP_SERVER_NAME_CONFIG = "server_config.name";
     private static final Log logger = LogFactory.getLog(GroupsApi.class);
 
     @POST
@@ -166,21 +141,16 @@ public class GroupsApi {
     public Response addUser(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid AddUserRequest request) throws ManagementApiException {
-        UsersDelegate usersDelegate = new UsersDelegate();
+
 
         try {
-            Ack ack = isIcpManagment(groupId) ? usersDelegate.addUserIcp(request) : usersDelegate.addUser(groupId, request);
+            Ack ack = UsersDelegate.getDelegate(groupId).addUser(request);
             Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
         } catch (UserStoreException e) {
             return handleUserStoreException(e);
         }
-    }
-
-    private static boolean isIcpManagment(String groupId) {
-        String getIcpServerName = (String) ConfigParser.getParsedConfigs().getOrDefault(ICP_SERVER_NAME_CONFIG, ICP_DEFAULT_NAME);
-        return getIcpServerName.equals(groupId);
     }
 
     private static Response handleUserStoreException(UserStoreException exception) {
@@ -215,27 +185,24 @@ public class GroupsApi {
             @Context ContainerRequestContext requestContext)
             throws ManagementApiException {
         String performedBy = (String) requestContext.getProperty("performedBy");
-        UsersDelegate usersDelegate = new UsersDelegate();
+
 
         // TODO: sabhtar, this is not the correct approach change this
-        if (performedBy != null) {
-            try {
-                Ack ack = usersDelegate.updateUserPasswordIcp(request, performedBy);
-                Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
-                HttpUtils.setHeaders(responseBuilder);
-                return responseBuilder.build();
-            } catch (UserStoreException e) {
-                Ack ack = new Ack(Constants.FAIL_STATUS);
-                ack.message(e.getMessage());
-                Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
-                HttpUtils.setHeaders(responseBuilder);
-                return responseBuilder.build();
-            }
+        if (performedBy == null) {
+            logger.warn("Unable to determine who did this operation");
         }
-        Ack ack = usersDelegate.updateUserPassword(groupId, request, accessToken);
-        Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
-        HttpUtils.setHeaders(responseBuilder);
-        return responseBuilder.build();
+        try {
+            Ack ack = UsersDelegate.getDelegate(groupId).updateUserPassword(request, performedBy);
+            Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        } catch (UserStoreException e) {
+            Ack ack = new Ack(Constants.FAIL_STATUS);
+            ack.message(e.getMessage());
+            Response.ResponseBuilder responseBuilder = Response.serverError().entity(ack);
+            HttpUtils.setHeaders(responseBuilder);
+            return responseBuilder.build();
+        }
     }
 
     @DELETE
@@ -253,13 +220,11 @@ public class GroupsApi {
             @PathParam("user-id") @Parameter(description = "User ID") String userId,
             @QueryParam("domain") @Parameter(description = "domain name") String domain,
             @Context ContainerRequestContext requestContext) throws ManagementApiException {
-        UsersDelegate usersDelegate = new UsersDelegate();
         Ack ack = null;
         String performedBy = (String) requestContext.getProperty("performedBy");
         try {
             // TODO: sabthar, we also need to audit performed by for deleteUser for MI too not just for ICP
-            ack = isIcpManagment(groupId) ? usersDelegate.deleteUserIcp(userId, performedBy) :
-                    usersDelegate.deleteUser(groupId, userId, domain);
+            ack = UsersDelegate.getDelegate(groupId).deleteUser(userId, domain);
             Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -1056,13 +1021,10 @@ public class GroupsApi {
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate) {
 
-        UsersDelegate usersDelegate = new UsersDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Users");
         try {
-            UsersResourceResponse users = isIcpManagment(groupId) ?
-                    usersDelegate.fetchPaginatedIcpUsers(searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate) :
-                    usersDelegate.fetchPaginatedUsers(groupId, searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
+            UsersResourceResponse users = UsersDelegate.getDelegate(groupId).fetchPaginatedUsers(searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
             responseBuilder = Response.ok().entity(users);
         } catch (DashboardUserStoreException e) {
             Error error = new Error();
@@ -1096,11 +1058,10 @@ public class GroupsApi {
     })
     public Response getRoles(
             @PathParam("group-id") @Parameter(description = "Group ID") String groupId) {
-        RolesDelegate rolesDelegate = new RolesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get All Roles");
         try {
-            RolesResourceResponse roleList = isIcpManagment(groupId) ? rolesDelegate.getAllRolesIcp() : rolesDelegate.getAllRoles(groupId);
+            RolesResourceResponse roleList = RolesDelegate.getDelegate(groupId).getAllRoles();
             responseBuilder = Response.ok().entity(roleList);
         } catch (DashboardUserStoreException e) {
             Error error = new Error();
@@ -1134,13 +1095,10 @@ public class GroupsApi {
             @QueryParam("order") @Parameter(description = "Order") String order,
             @QueryParam("orderBy") @Parameter(description = "Order By") String orderBy,
             @QueryParam("isUpdate") @Parameter(description = "Whether it is an update") String isUpdate) {
-        RolesDelegate rolesDelegate = new RolesDelegate();
         Response.ResponseBuilder responseBuilder;
         logger.debug("Invoking the Groups API to get Roles");
         try {
-            RolesResourceResponse roleList = isIcpManagment(groupId) ?
-                    rolesDelegate.fetchPaginatedRolesResponseIcp(searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate)
-                    : rolesDelegate.fetchPaginatedRolesResponse(groupId, searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
+            RolesResourceResponse roleList = RolesDelegate.getDelegate(groupId).fetchPaginatedRolesResponse(searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
             responseBuilder = Response.ok().entity(roleList);
         } catch (DashboardUserStoreException e) {
             Error error = new Error();
@@ -1170,10 +1128,8 @@ public class GroupsApi {
     public Response addRole(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid AddRoleRequest request) throws ManagementApiException {
-        RolesDelegate rolesDelegate = new RolesDelegate();
         try {
-            Ack ack = isIcpManagment(groupId) ? rolesDelegate.addRoleIcp(request) :
-                    rolesDelegate.addRole(groupId, request);
+            Ack ack = RolesDelegate.getDelegate(groupId).addRole(request);
             Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -1196,10 +1152,8 @@ public class GroupsApi {
     public Response updateRole(
             @PathParam("group-id") @Parameter(description = "Group ID of the node") String groupId,
             @Valid UpdateRoleRequest request) throws ManagementApiException {
-        RolesDelegate rolesDelegate = new RolesDelegate();
         try {
-            Ack ack = isIcpManagment(groupId) ? rolesDelegate.updateRoleIcp(request)
-                    : rolesDelegate.updateRole(groupId, request);
+            Ack ack = RolesDelegate.getDelegate(groupId).updateRole(request);
             Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -1225,9 +1179,8 @@ public class GroupsApi {
             @PathParam("role-name") @Parameter(description = "Role Name") String roleName,
             @QueryParam("domain") @Parameter(description = "domain name") String domain)
             throws ManagementApiException {
-        RolesDelegate rolesDelegate = new RolesDelegate();
         try {
-            Ack ack = isIcpManagment(groupId) ? rolesDelegate.deleteRoleIcp(roleName) : rolesDelegate.deleteRole(groupId, roleName, domain);
+            Ack ack = RolesDelegate.getDelegate(groupId).deleteRole(roleName, domain);
             Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();

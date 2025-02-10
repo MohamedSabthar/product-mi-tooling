@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.wso2.config.mapper.ConfigParser;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
@@ -18,6 +19,7 @@ import org.wso2.ei.dashboard.core.rest.model.ArtifactUpdateRequest;
 import org.wso2.ei.dashboard.core.rest.model.Artifacts;
 import org.wso2.ei.dashboard.core.rest.model.ArtifactsInner;
 import org.wso2.ei.dashboard.core.rest.model.ArtifactsResourceResponse;
+import org.wso2.ei.dashboard.micro.integrator.delegates.UsersDelegate;
 
 import java.io.IOException;
 
@@ -35,7 +37,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class DelegatesUtil {
     private static final DataManager DATA_MANAGER = DataManagerSingleton.getDataManager();
-
+    private static final String ICP_DEFAULT_NAME = "icp";
+    private static final String ICP_SERVER_NAME_CONFIG = "server_config.name";
     private static final Logger logger = LogManager.getLogger(DelegatesUtil.class);
 
     private static List<ArtifactsInner> searchedArtifacts;
@@ -292,4 +295,8 @@ public class DelegatesUtil {
         prevResourceType = resourceType;
     }
 
+    public static boolean isIcpManagement(String groupId) {
+        String getIcpServerName = (String) ConfigParser.getParsedConfigs().getOrDefault(ICP_SERVER_NAME_CONFIG, ICP_DEFAULT_NAME);
+        return getIcpServerName.equals(groupId);
+    }
 }
