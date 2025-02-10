@@ -30,6 +30,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
+import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
@@ -52,13 +53,13 @@ import java.util.*;
 public class RolesDelegate {
     private static final Log log = LogFactory.getLog(RolesDelegate.class);
     private static final DataManager dataManager = DataManagerSingleton.getDataManager();
-    private static List<RoleListInner>  searchedList;
+    private static List<RoleListInner> searchedList;
     private static String prevSearchKey = null;
     private static int count;
 
-    public RolesResourceResponse fetchPaginatedRolesResponse(String groupId, String searchKey, 
-        String lowerLimit, String upperLimit, String order, String orderBy, String isUpdate) 
-        throws ManagementApiException {
+    public RolesResourceResponse fetchPaginatedRolesResponse(String groupId, String searchKey,
+                                                             String lowerLimit, String upperLimit, String order, String orderBy, String isUpdate)
+            throws ManagementApiException {
         String resourceType = Constants.ROLES;
         DelegatesUtil.logDebugLogs(resourceType, groupId, lowerLimit, upperLimit, order, orderBy, isUpdate);
         int fromIndex = Integer.parseInt(lowerLimit);
@@ -80,8 +81,8 @@ public class RolesDelegate {
         return rolesResourceResponse;
     }
 
-    private  List<RoleListInner> getSearchedRoles(String groupId, String searchKey, 
-        String order, String orderBy) throws ManagementApiException {
+    private List<RoleListInner> getSearchedRoles(String groupId, String searchKey,
+                                                 String order, String orderBy) throws ManagementApiException {
 
         RoleList roles = new RoleList();
         NodeList nodeList = dataManager.fetchNodes(groupId);
@@ -90,7 +91,7 @@ public class RolesDelegate {
         String mgtApiUrl = ManagementApiUtils.getMgtApiUrl(groupId, nodeId);
         String accessToken = dataManager.getAccessToken(groupId, nodeId);
         String url = mgtApiUrl.concat("roles/");
-        JsonArray roleList = DelegatesUtil.getResourceResultList(groupId, nodeId, "roles", 
+        JsonArray roleList = DelegatesUtil.getResourceResultList(groupId, nodeId, "roles",
                 mgtApiUrl, accessToken, searchKey);
 
         for (JsonElement role : roleList) {
@@ -112,6 +113,59 @@ public class RolesDelegate {
         return roles;
     }
 
+    private static RoleListInner getRoleDetails(String groupId, String nodeId, String accessToken, String url,
+                                                String roleId) throws ManagementApiException {
+        RoleListInner roleListInner = new RoleListInner();
+        roleListInner.setRoleName(roleId);
+        String getRoleDetailsUrl;
+        String roleDetail;
+        if (roleId.contains(Constants.DOMAIN_SEPARATOR)) {
+            String[] parts = roleId.split(Constants.DOMAIN_SEPARATOR);
+            // parts[0] = domain, parts[1] = new roleId
+            getRoleDetailsUrl = url.concat(parts[1]).concat("?domain=").concat(urlEncode(parts[0]));
+        } else {
+            getRoleDetailsUrl = url.concat(roleId);
+        }
+        CloseableHttpResponse roleDetailResponse = Utils.doGet(groupId, nodeId, accessToken, getRoleDetailsUrl);
+        roleDetail = HttpUtils.getStringResponse(roleDetailResponse);
+        roleListInner.setDetails(roleDetail);
+        return roleListInner;
+    }
+
+    private static String urlEncode(String userId) {
+        try {
+            return URLEncoder.encode(userId, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            log.error("Error occurred while encoding user id " + userId, e);
+            return userId;
+        }
+    }
+
+    private RoleList getPaginatedRolesResultsFromMI(List<RoleListInner> roles, int lowerLimit, int upperLimit)
+            throws ManagementApiException {
+
+        RoleList resultList = new RoleList();
+        try {
+            if (roles.size() < upperLimit) {
+                upperLimit = roles.size();
+            }
+            if (upperLimit < lowerLimit) {
+                lowerLimit = upperLimit;
+            }
+            List<RoleListInner> paginatedList = roles.subList(lowerLimit, upperLimit);
+
+            resultList.addAll(paginatedList);
+
+            return resultList;
+
+        } catch (IndexOutOfBoundsException e) {
+            log.error("Index values are out of bound", e);
+        } catch (IllegalArgumentException e) {
+            log.error("Illegal arguments for index values", e);
+        }
+        return null;
+    }
+
     public RolesResourceResponse getAllRoles(String groupId) throws ManagementApiException {
 
         RoleList roles = new RoleList();
@@ -121,7 +175,7 @@ public class RolesDelegate {
         String mgtApiUrl = ManagementApiUtils.getMgtApiUrl(groupId, nodeId);
         String accessToken = dataManager.getAccessToken(groupId, nodeId);
         String url = mgtApiUrl.concat("roles/");
-        JsonArray roleList = DelegatesUtil.getResourceResultList(groupId, nodeId, "roles", 
+        JsonArray roleList = DelegatesUtil.getResourceResultList(groupId, nodeId, "roles",
                 mgtApiUrl, accessToken, null);
 
         for (JsonElement role : roleList) {
@@ -138,10 +192,15 @@ public class RolesDelegate {
     }
 
     public RolesResourceResponse getAllRolesIcp() throws UserStoreException {
+        if (UserStoreManagerUtils.isFileBasedUserStoreEnabled()) {
+            throw new DashboardUserStoreException("Role management is not supported with the file-based user store. " +
+                    "Please plug in a user store for the correct functionality", "403");
+
+        }
         RolesResourceResponse rolesResourceResponse = new RolesResourceResponse();
         String[] roles = UserStoreManagerUtils.getUserStoreManager().getRoleNames();
         RoleList roleList = new RoleList();
-        for (String role: roles) {
+        for (String role : roles) {
             RoleListInner inner = new RoleListInner();
             inner.setRoleName(role);
             JsonArray jsonArray = new JsonArray();
@@ -152,31 +211,6 @@ public class RolesDelegate {
         rolesResourceResponse.setResourceList(roleList);
         rolesResourceResponse.setCount(roleList.size());
         return rolesResourceResponse;
-    }
-
-    private RoleList getPaginatedRolesResultsFromMI(List<RoleListInner> roles, int lowerLimit, int upperLimit) 
-        throws ManagementApiException {
-        
-        RoleList resultList = new RoleList();
-        try {
-            if (roles.size() < upperLimit) {
-                upperLimit = roles.size();
-            }
-            if (upperLimit < lowerLimit) {
-                lowerLimit = upperLimit;
-            }
-            List<RoleListInner> paginatedList = roles.subList(lowerLimit, upperLimit);
-
-            resultList.addAll(paginatedList);
-            
-            return resultList;
-
-        } catch (IndexOutOfBoundsException e) {
-            log.error("Index values are out of bound", e);
-        } catch (IllegalArgumentException e) {
-            log.error("Illegal arguments for index values", e);
-        }
-        return null;      
     }
 
     public Ack addRole(String groupId, AddRoleRequest request) throws ManagementApiException {
@@ -195,6 +229,16 @@ public class RolesDelegate {
             ack.setStatus(Constants.SUCCESS_STATUS);
         }
         return ack;
+    }
+
+    private JsonObject createAddRolePayload(AddRoleRequest request) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("role", request.getRoleName());
+        String domain = request.getDomain();
+        if (null != domain && !domain.equals("")) {
+            payload.addProperty("domain", domain);
+        }
+        return payload;
     }
 
     public Ack addRoleIcp(AddRoleRequest request) throws UserStoreException {
@@ -233,6 +277,14 @@ public class RolesDelegate {
         return ack;
     }
 
+    private JsonObject createUpdatePayload(UpdateRoleRequest request) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("userId", request.getUserId());
+        payload.add("removedRoles", JsonParser.parseString(new Gson().toJson(request.getRemovedRoles())));
+        payload.add("addedRoles", JsonParser.parseString(new Gson().toJson(request.getAddedRoles())));
+        return payload;
+    }
+
     public Ack deleteRole(String groupId, String roleName, String domain) throws ManagementApiException {
         if (StringUtils.isEmpty(domain)) {
             log.debug("Deleting role " + roleName + " in group " + groupId);
@@ -260,66 +312,13 @@ public class RolesDelegate {
         return ack;
     }
 
-    private static RoleListInner getRoleDetails(String groupId, String nodeId, String accessToken, String url,
-                                         String roleId) throws ManagementApiException {
-        RoleListInner roleListInner = new RoleListInner();
-        roleListInner.setRoleName(roleId);
-        String getRoleDetailsUrl;
-        String roleDetail;
-        if (roleId.contains(Constants.DOMAIN_SEPARATOR)) {
-            String[] parts = roleId.split(Constants.DOMAIN_SEPARATOR);
-            // parts[0] = domain, parts[1] = new roleId
-            getRoleDetailsUrl = url.concat(parts[1]).concat("?domain=").concat(urlEncode(parts[0]));
-        } else {
-            getRoleDetailsUrl = url.concat(roleId);
-        }
-        CloseableHttpResponse roleDetailResponse = Utils.doGet(groupId, nodeId, accessToken, getRoleDetailsUrl);
-        roleDetail = HttpUtils.getStringResponse(roleDetailResponse);
-        roleListInner.setDetails(roleDetail);
-        return roleListInner;
-    }
-
-    private static RoleListInner getRoleDetailsIcp(String role) throws UserStoreException {
-        RoleListInner inner = new RoleListInner();
-        inner.setRoleName(role);
-        JsonObject rolesObject = new JsonObject();
-        JsonArray jsonArray = new JsonArray();
-        Arrays.stream(UserStoreManagerUtils.getUserStoreManager().getUserListOfRole(role)).forEach(jsonArray::add);
-        rolesObject.add("users", jsonArray);
-        inner.setDetails(rolesObject.toString());
-        return inner;
-    }
-
-    private JsonObject createAddRolePayload(AddRoleRequest request) {
-        JsonObject payload = new JsonObject();
-        payload.addProperty("role", request.getRoleName());
-        String domain = request.getDomain();
-        if (null != domain && !domain.equals("")) {
-            payload.addProperty("domain", domain);
-        }
-        return payload;
-    }
-
-    private JsonObject createUpdatePayload(UpdateRoleRequest request) {
-        JsonObject payload = new JsonObject();
-        payload.addProperty("userId", request.getUserId());
-        payload.add("removedRoles", JsonParser.parseString(new Gson().toJson(request.getRemovedRoles())));
-        payload.add("addedRoles", JsonParser.parseString(new Gson().toJson(request.getAddedRoles())));
-        return payload;
-    }
-
-    private static String urlEncode(String userId) {
-        try {
-            return URLEncoder.encode(userId, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            log.error("Error occurred while encoding user id " + userId, e);
-            return userId;
-        }
-    }
-
     public RolesResourceResponse fetchPaginatedRolesResponseIcp(String searchKey, String lowerLimit, String upperLimit, String order, String orderBy, String isUpdate) throws UserStoreException {
+        if (UserStoreManagerUtils.isFileBasedUserStoreEnabled()) {
+            throw new DashboardUserStoreException("Role management is not supported with the file-based user store. " +
+                    "Please plug in a user store for the correct functionality", "403");
+
+        }
         String resourceType = Constants.ROLES;
-//        TODO: sabhtar, enable debug log below
 //        DelegatesUtil.logDebugLogs(resourceType, groupId, lowerLimit, upperLimit, order, orderBy, isUpdate);
         int fromIndex = Integer.parseInt(lowerLimit);
         int toIndex = Integer.parseInt(upperLimit);
@@ -340,9 +339,7 @@ public class RolesDelegate {
         return rolesResourceResponse;
     }
 
-    private  List<RoleListInner> getSearchedRolesIcp(String searchKey, String order) throws UserStoreException {
-
-
+    private List<RoleListInner> getSearchedRolesIcp(String searchKey, String order) throws UserStoreException {
         String[] roles = UserStoreManagerUtils.getUserStoreManager().getRoleNames();
         RoleList roleList = new RoleList();
         for (String role : roles) {
@@ -361,6 +358,17 @@ public class RolesDelegate {
         }
 
         return roleList;
+    }
+
+    private static RoleListInner getRoleDetailsIcp(String role) throws UserStoreException {
+        RoleListInner inner = new RoleListInner();
+        inner.setRoleName(role);
+        JsonObject rolesObject = new JsonObject();
+        JsonArray jsonArray = new JsonArray();
+        Arrays.stream(UserStoreManagerUtils.getUserStoreManager().getUserListOfRole(role)).forEach(jsonArray::add);
+        rolesObject.add("users", jsonArray);
+        inner.setDetails(rolesObject.toString());
+        return inner;
     }
 
     private RoleList getPaginatedRolesResultsFromIcp(List<RoleListInner> roles, int lowerLimit, int upperLimit) {
@@ -394,7 +402,7 @@ public class RolesDelegate {
         if (!userStoreManager.isExistingUser(request.getUserId())) {
             throw new UserStoreException("The user : " + request.getUserId() + " does not exists");
         }
-        userStoreManager.updateRoleListOfUser(request.getUserId() ,request.getRemovedRoles().toArray(new String[0]) ,request.getAddedRoles().toArray(new String[0]));
+        userStoreManager.updateRoleListOfUser(request.getUserId(), request.getRemovedRoles().toArray(new String[0]), request.getAddedRoles().toArray(new String[0]));
         Ack ack = new Ack(Constants.SUCCESS_STATUS);
         return ack;
     }

@@ -133,6 +133,11 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     protected abstract String[] doListUsers(String filter, int maxItemLimit) throws UserStoreException;
 
     @Override
+    public boolean isExistingUser(String username) throws UserStoreException {
+        return this.doCheckExistingUser(username);
+    }
+
+    @Override
     public boolean isExistingRole(String roleName) throws UserStoreException {
         return doCheckExistingRole(roleName);
     }
@@ -560,6 +565,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
 
     protected abstract RoleContext createRoleContext(String roleName) throws UserStoreException;
 
+    @Override
     public void addRole(String roleName, String[] userList, Permission[] permissions, boolean isSharedRole) throws UserStoreException {
         if (isReadOnly()) {
             throw new UserStoreException(ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
@@ -696,10 +702,5 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         } catch (Exception e) {
             log.error("Error while assigning admin user to admin role.", e);
         }
-    }
-
-    @Override
-    public boolean isExistingUser(String username) throws UserStoreException {
-        return this.doCheckExistingUser(username);
     }
 }

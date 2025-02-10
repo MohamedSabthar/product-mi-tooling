@@ -23,12 +23,10 @@ package org.wso2.ei.dashboard.micro.integrator.delegates;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
-
 import org.jetbrains.annotations.NotNull;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
@@ -38,14 +36,7 @@ import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
 import org.wso2.ei.dashboard.core.data.manager.DataManager;
 import org.wso2.ei.dashboard.core.data.manager.DataManagerSingleton;
 import org.wso2.ei.dashboard.core.exception.ManagementApiException;
-import org.wso2.ei.dashboard.core.rest.model.Ack;
-import org.wso2.ei.dashboard.core.rest.model.AddUserRequest;
-import org.wso2.ei.dashboard.core.rest.model.NodeList;
-import org.wso2.ei.dashboard.core.rest.model.PasswordRequest;
-import org.wso2.ei.dashboard.core.rest.model.User;
-import org.wso2.ei.dashboard.core.rest.model.Users;
-import org.wso2.ei.dashboard.core.rest.model.UsersInner;
-import org.wso2.ei.dashboard.core.rest.model.UsersResourceResponse;
+import org.wso2.ei.dashboard.core.rest.model.*;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
@@ -55,7 +46,6 @@ import org.wso2.micro.integrator.security.user.api.UserStoreManager;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Objects;
@@ -63,6 +53,7 @@ import java.util.Objects;
 import static org.wso2.ei.dashboard.core.commons.Constants.*;
 
 // TODO: sabthar, User an asbstract class and 2 sub class for MI and ICP user delegation
+
 /**
  * Delegate class to handle requests from users page.
  */
@@ -103,6 +94,92 @@ public class UsersDelegate {
         return response;
     }
 
+    private static User[] getSearchedUsers(String groupId, String searchKey) throws ManagementApiException {
+        NodeList nodeList = dataManager.fetchNodes(groupId);
+        // assumption - In a group, users of all nodes in the group should be identical
+        String nodeId = nodeList.get(0).getNodeId();
+        String mgtApiUrl = ManagementApiUtils.getMgtApiUrl(groupId, nodeId);
+        String accessToken = dataManager.getAccessToken(groupId, nodeId);
+        JsonArray usersList = DelegatesUtil.getResourceResultList(groupId, nodeId, "users", mgtApiUrl,
+                accessToken, searchKey);
+        return new Gson().fromJson(usersList, User[].class);
+    }
+
+    private Users getPaginatedUsersResultsFromMI(User[] users, int lowerLimit, int upperLimit, String groupId,
+                                                 String order, String orderBy) throws ManagementApiException {
+        Users resultList = new Users();
+        try {
+            upperLimit = Math.min(users.length, upperLimit);
+            lowerLimit = Math.min(lowerLimit, upperLimit);
+            users = Arrays.copyOfRange(users, lowerLimit, upperLimit);
+
+            // creating the URL and fetch role info of user in the current page
+            fetchUserInfo(users, groupId, resultList);
+            Collections.sort(resultList);
+
+            if ("desc".equalsIgnoreCase(order)) {
+                Collections.reverse(resultList);
+            }
+            return resultList;
+
+        } catch (IndexOutOfBoundsException e) {
+            log.error("Index values are out of bound", e);
+        } catch (IllegalArgumentException e) {
+            log.error("Illegal arguments for index values", e);
+        }
+        return null;
+    }
+
+    /**
+     * Fetch individual user details only for the user of the current page.
+     *
+     * @param users      all users
+     * @param groupId    groupId
+     * @param resultList list of user details
+     * @throws ManagementApiException error occurred while fetching user details.
+     */
+    private void fetchUserInfo(User[] users, String groupId, Users resultList)
+            throws ManagementApiException {
+        NodeList nodeList = dataManager.fetchNodes(groupId);
+        String nodeId = nodeList.get(0).getNodeId();
+        String mgtApiUrl = ManagementApiUtils.getMgtApiUrl(groupId, nodeId);
+        String url = mgtApiUrl.concat("users/");
+        for (User user : users) {
+            UsersInner usersInner = getUserDetails(groupId, nodeId, url, user.getUserId());
+            resultList.add(usersInner);
+        }
+    }
+
+    private static UsersInner getUserDetails(String groupId, String nodeId, String url,
+                                             String userId) throws ManagementApiException {
+        UsersInner usersInner = new UsersInner();
+        usersInner.setUserId(userId);
+        String getUsersDetailsUrl;
+        if (userId.contains(DOMAIN_SEPARATOR)) {
+            String[] parts = userId.split(DOMAIN_SEPARATOR);
+            getUsersDetailsUrl = url.concat(urlEncode(parts[1])).concat("?domain=").concat(urlEncode(parts[0]));
+        } else {
+            getUsersDetailsUrl = url.concat(urlEncode(userId));
+        }
+        String accessToken = dataManager.getAccessToken(groupId, nodeId);
+        try (CloseableHttpResponse userDetailResponse = Utils.doGet(groupId, nodeId, accessToken, getUsersDetailsUrl)) {
+            String userDetail = HttpUtils.getStringResponse(userDetailResponse);
+            usersInner.setDetails(userDetail);
+            return usersInner;
+        } catch (IOException e) {
+            throw new ManagementApiException("Error while retrieving user details", 500);
+        }
+    }
+
+    private static String urlEncode(String userId) {
+        try {
+            return URLEncoder.encode(userId, "UTF-8").replace("+", "%20");
+        } catch (UnsupportedEncodingException e) {
+            log.error("Error occurred while encoding user id " + userId, e);
+            return userId;
+        }
+    }
+
     public UsersResourceResponse fetchPaginatedIcpUsers(String searchKey, String lowerLimit, String upperLimit,
                                                         String order, String orderBy, String isUpdate)
             throws UserStoreException {
@@ -139,6 +216,53 @@ public class UsersDelegate {
         return response;
     }
 
+    private static User[] getSearchedIcpUsers(String searchKey) throws UserStoreException {
+        return Arrays.stream(UserStoreManagerUtils.getUserStoreManager().listUsers(searchKey, -1))
+                .map(User::new).toArray(User[]::new);
+    }
+
+    private Users getPaginatedIcpUsersResult(User[] userArrary, int lowerLimit, int upperLimit,
+                                             String order, String orderBy) throws UserStoreException {
+        try {
+            upperLimit = Math.min(userArrary.length, upperLimit);
+            lowerLimit = Math.min(lowerLimit, upperLimit);
+            User[] paginatedUsersArray = Arrays.copyOfRange(userArrary, lowerLimit, upperLimit);
+            Users users = queryUserInfo(paginatedUsersArray);
+            if ("desc".equalsIgnoreCase(order)) {
+                Collections.reverse(users);
+            }
+            return users;
+        } catch (IndexOutOfBoundsException e) {
+            log.error("Index values are out of bound", e);
+        } catch (IllegalArgumentException e) {
+            log.error("Illegal arguments for index values", e);
+        }
+        return null;
+    }
+
+    private static @NotNull Users queryUserInfo(User[] users) throws UserStoreException {
+        Users resultList = new Users();
+        for (User user : users) {
+            String[] roles = UserStoreManagerUtils.getUserStoreManager().getRoleListOfUser(user.getUserId());
+
+            JsonObject userDetails = new JsonObject();
+            userDetails.addProperty(USER_ID, user.getUserId());
+            userDetails.addProperty(IS_ADMIN, UserStoreManagerUtils.isAdminUser(user.getUserId()));
+
+            JsonArray rolesArray = new JsonArray();
+            Arrays.stream(roles).forEach(rolesArray::add);
+            userDetails.add(ROLES, rolesArray);
+
+            UsersInner usersInner = new UsersInner();
+            usersInner.userId(user.getUserId());
+            usersInner.setDetails(userDetails.toString());
+
+            resultList.add(usersInner);
+        }
+        Collections.sort(resultList);
+        return resultList;
+    }
+
     public Ack addUser(String groupId, AddUserRequest request) throws ManagementApiException {
         log.debug("Adding user " + request.getUserId() + " in group " + groupId);
         Ack ack = new Ack(FAIL_STATUS);
@@ -166,15 +290,26 @@ public class UsersDelegate {
         return ack;
     }
 
+    private JsonObject createAddUserPayload(AddUserRequest request) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("userId", request.getUserId());
+        String domain = request.getDomain();
+        if (!StringUtils.isEmpty(domain)) {
+            payload.addProperty("domain", domain);
+        }
+        payload.addProperty("password", request.getPassword());
+        payload.addProperty("isAdmin", request.isIsAdmin().toString());
+        return payload;
+    }
 
     public Ack addUserIcp(AddUserRequest request) throws UserStoreException {
         log.debug("Adding user " + request.getUserId() + " to icp");
         UserStoreManager manager = UserStoreManagerUtils.getUserStoreManager();
         synchronized (this) {
-            String[] roleList  = request.isIsAdmin() ? new String[]{"admin"}: new String[]{};
+            String[] roleList = request.isIsAdmin() ? new String[]{"admin"} : new String[]{};
             manager.addUser(request.getUserId(), request.getPassword(), roleList, null, null, false);
         }
-        Ack ack =  new Ack(SUCCESS_STATUS);
+        Ack ack = new Ack(SUCCESS_STATUS);
         return ack;
     }
 
@@ -212,7 +347,19 @@ public class UsersDelegate {
         return ack;
     }
 
+    private JsonObject createUserUpdatePasswordPayload(PasswordRequest request) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("newPassword", request.getNewPassword());
+        payload.addProperty("confirmPassword", request.getConfirmPassword());
+        payload.addProperty("oldPassword", request.getOldPassword());
+        return payload;
+    }
+
     public Ack updateUserPasswordIcp(PasswordRequest request, String performedBy) throws UserStoreException {
+        if (UserStoreManagerUtils.isFileBasedUserStoreEnabled()) {
+            throw new DashboardUserStoreException("Unable update password with the file-based user store. " +
+                    "Please plug in a user store for the correct functionality", "403");
+        }
         String user = request.getUserId();
         if (log.isDebugEnabled()) {
             log.debug("Request received to update user credentials: " + user);
@@ -294,7 +441,6 @@ public class UsersDelegate {
         }
     }
 
-
     public Ack deleteUserIcp(String userId, String performedBy) throws UserStoreException {
         if (log.isDebugEnabled()) {
             log.debug("Request received to delete the user: " + userId);
@@ -319,167 +465,12 @@ public class UsersDelegate {
         String superAdmin = realmConfig.getAdminRoleName();
         if (superAdmin != null && superAdmin.equals(performedBy)) {
             userStoreManager.deleteUser(userId);
-        } else
-        if (!Arrays.asList(roles).contains(ADMIN)) {
+        } else if (!Arrays.asList(roles).contains(ADMIN)) {
             userStoreManager.deleteUser(userId);
         } else {
             log.error("Only super admin user can delete admins");
             throw new UserStoreException("Only super admin user can delete admins");
         }
         return new Ack(SUCCESS_STATUS);
-    }
-
-
-    private JsonObject createAddUserPayload(AddUserRequest request) {
-        JsonObject payload = new JsonObject();
-        payload.addProperty("userId", request.getUserId());
-        String domain = request.getDomain();
-        if (!StringUtils.isEmpty(domain)) {
-            payload.addProperty("domain", domain);
-        }
-        payload.addProperty("password", request.getPassword());
-        payload.addProperty("isAdmin", request.isIsAdmin().toString());
-        return payload;
-    }
-
-    private JsonObject createUserUpdatePasswordPayload(PasswordRequest request) {
-        JsonObject payload = new JsonObject();
-        payload.addProperty("newPassword", request.getNewPassword());
-        payload.addProperty("confirmPassword", request.getConfirmPassword());
-        payload.addProperty("oldPassword", request.getOldPassword());
-        return payload;
-    }
-
-    private static User[] getSearchedUsers(String groupId, String searchKey) throws ManagementApiException {
-        NodeList nodeList = dataManager.fetchNodes(groupId);
-        // assumption - In a group, users of all nodes in the group should be identical
-        String nodeId = nodeList.get(0).getNodeId();
-        String mgtApiUrl = ManagementApiUtils.getMgtApiUrl(groupId, nodeId);
-        String accessToken = dataManager.getAccessToken(groupId, nodeId);
-        JsonArray usersList = DelegatesUtil.getResourceResultList(groupId, nodeId, "users", mgtApiUrl,
-                accessToken, searchKey);
-        return new Gson().fromJson(usersList, User[].class);
-    }
-
-    private static User[] getSearchedIcpUsers(String searchKey) throws UserStoreException {
-        return Arrays.stream(UserStoreManagerUtils.getUserStoreManager().listUsers(searchKey, -1))
-                .map(User::new).toArray(User[]::new);
-    }
-
-    private Users getPaginatedIcpUsersResult(User[] userArrary, int lowerLimit, int upperLimit,
-                                             String order, String orderBy) throws UserStoreException {
-        try {
-            upperLimit = Math.min(userArrary.length, upperLimit);
-            lowerLimit = Math.min(lowerLimit, upperLimit);
-            User[] paginatedUsersArray = Arrays.copyOfRange(userArrary, lowerLimit, upperLimit);
-            Users users = queryUserInfo(paginatedUsersArray);
-            if ("desc".equalsIgnoreCase(order)) {
-                Collections.reverse(users);
-            }
-            return users;
-        } catch (IndexOutOfBoundsException e) {
-            log.error("Index values are out of bound", e);
-        } catch (IllegalArgumentException e) {
-            log.error("Illegal arguments for index values", e);
-        }
-        return null;
-    }
-
-    private static @NotNull Users queryUserInfo(User[] users) throws UserStoreException {
-        Users resultList = new Users();
-        for (User user : users) {
-            String[] roles = UserStoreManagerUtils.getUserStoreManager().getRoleListOfUser(user.getUserId());
-
-            JsonObject userDetails = new JsonObject();
-            userDetails.addProperty(USER_ID, user.getUserId());
-            userDetails.addProperty(IS_ADMIN, UserStoreManagerUtils.isAdminUser(user.getUserId()));
-
-            JsonArray rolesArray = new JsonArray();
-            Arrays.stream(roles).forEach(rolesArray::add);
-            userDetails.add(ROLES, rolesArray);
-
-            UsersInner usersInner = new UsersInner();
-            usersInner.userId(user.getUserId());
-            usersInner.setDetails(userDetails.toString());
-
-            resultList.add(usersInner);
-        }
-        Collections.sort(resultList);
-        return resultList;
-    }
-
-    private Users getPaginatedUsersResultsFromMI(User[] users, int lowerLimit, int upperLimit, String groupId,
-                                                 String order, String orderBy) throws ManagementApiException {
-        Users resultList = new Users();
-        try {
-            upperLimit = Math.min(users.length, upperLimit);
-            lowerLimit = Math.min(lowerLimit, upperLimit);
-            users = Arrays.copyOfRange(users, lowerLimit, upperLimit);
-
-            // creating the URL and fetch role info of user in the current page
-            fetchUserInfo(users, groupId, resultList);
-            Collections.sort(resultList);
-
-            if ("desc".equalsIgnoreCase(order)) {
-                Collections.reverse(resultList);
-            }
-            return resultList;
-
-        } catch (IndexOutOfBoundsException e) {
-            log.error("Index values are out of bound", e);
-        } catch (IllegalArgumentException e) {
-            log.error("Illegal arguments for index values", e);
-        }
-        return null;
-    }
-
-    /**
-     * Fetch individual user details only for the user of the current page.
-     *
-     * @param users      all users
-     * @param groupId    groupId
-     * @param resultList list of user details
-     * @throws ManagementApiException error occurred while fetching user details.
-     */
-    private void fetchUserInfo(User[] users, String groupId, Users resultList)
-            throws ManagementApiException {
-        NodeList nodeList = dataManager.fetchNodes(groupId);
-        String nodeId = nodeList.get(0).getNodeId();
-        String mgtApiUrl = ManagementApiUtils.getMgtApiUrl(groupId, nodeId);
-        String url = mgtApiUrl.concat("users/");
-        for (User user : users) {
-            UsersInner usersInner = getUserDetails(groupId, nodeId, url, user.getUserId());
-            resultList.add(usersInner);
-        }
-    }
-
-    private static UsersInner getUserDetails(String groupId, String nodeId, String url,
-                                             String userId) throws ManagementApiException {
-        UsersInner usersInner = new UsersInner();
-        usersInner.setUserId(userId);
-        String getUsersDetailsUrl;
-        if (userId.contains(DOMAIN_SEPARATOR)) {
-            String[] parts = userId.split(DOMAIN_SEPARATOR);
-            getUsersDetailsUrl = url.concat(urlEncode(parts[1])).concat("?domain=").concat(urlEncode(parts[0]));
-        } else {
-            getUsersDetailsUrl = url.concat(urlEncode(userId));
-        }
-        String accessToken = dataManager.getAccessToken(groupId, nodeId);
-        try (CloseableHttpResponse userDetailResponse = Utils.doGet(groupId, nodeId, accessToken, getUsersDetailsUrl)) {
-            String userDetail = HttpUtils.getStringResponse(userDetailResponse);
-            usersInner.setDetails(userDetail);
-            return usersInner;
-        } catch (IOException e) {
-            throw new ManagementApiException("Error while retrieving user details", 500);
-        }
-    }
-
-    private static String urlEncode(String userId) {
-        try {
-            return URLEncoder.encode(userId, "UTF-8").replace("+", "%20");
-        } catch (UnsupportedEncodingException e) {
-            log.error("Error occurred while encoding user id " + userId, e);
-            return userId;
-        }
     }
 }

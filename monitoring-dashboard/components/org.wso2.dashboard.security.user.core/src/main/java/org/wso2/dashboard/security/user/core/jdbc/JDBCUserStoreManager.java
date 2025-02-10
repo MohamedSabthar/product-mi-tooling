@@ -59,6 +59,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.LinkedList;
 import java.util.List;
@@ -91,11 +92,19 @@ import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstan
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.STORE_SALTED_PASSWORDS;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.UPDATE_USER_PASSWORD;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.USER_NAME_UNIQUE;
-import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.*;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.ADD_ROLE_TO_USER_CASE_INSENSITIVE;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.ADD_USER_TO_ROLE_CASE_INSENSITIVE;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.DELETE_USER_CASE_INSENSITIVE;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.GET_IS_USER_EXISTING_CASE_INSENSITIVE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.GET_IS_USER_ROLE_EXIST_CASE_INSENSITIVE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.GET_USER_FILTER_CASE_INSENSITIVE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.GET_USER_ROLE_CASE_INSENSITIVE;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.ON_DELETE_USER_REMOVE_ATTRIBUTE_CASE_INSENSITIVE;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.ON_DELETE_USER_REMOVE_USER_ROLE_CASE_INSENSITIVE;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.REMOVE_ROLE_FROM_USER_CASE_INSENSITIVE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.SELECT_USER_CASE_INSENSITIVE;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.UPDATE_USER_PASSWORD_CASE_INSENSITIVE;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.USER_NAME_UNIQUE_CASE_INSENSITIVE;
 
 public class JDBCUserStoreManager extends AbstractUserStoreManager {
     public static final String EMPTY_STRING = "";

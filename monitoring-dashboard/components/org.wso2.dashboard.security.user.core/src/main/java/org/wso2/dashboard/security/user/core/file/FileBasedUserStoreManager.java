@@ -127,92 +127,6 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     /**
-     * Method to retrieve FileBasedUserStoreManager
-     *
-     * @return FileBasedUserStoreManager
-     */
-    public static FileBasedUserStoreManager getUserStoreManager() {
-        return userStoreManager;
-    }
-
-    @Override
-    protected boolean doAuthenticate(String userName, Object credential) {
-
-        UserInfo userInfo = userMap.get(userName);
-        if (userInfo != null) {
-            return new String(userInfo.getPassword()).equals(credential);
-        }
-        return false;
-    }
-
-    @Override
-    protected String[] doListUsers(String filter, int maxItemLimit) throws UserStoreException {
-        return new String[0];
-    }
-
-    @Override
-    protected RoleContext createRoleContext(String roleName) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean authenticate(final String userName, final Object credential) {
-        if (userName == null || credential == null) {
-            return false;
-        }
-        return doAuthenticate(userName, credential);
-    }
-
-    @Override
-    public boolean isExistingUser(String s) throws UserStoreException {
-        return false;
-    }
-
-    @Override
-    public boolean isExistingRole(String s, boolean b) throws UserStoreException {
-        return false;
-    }
-
-    @Override
-    protected String[] doGetRoleNames(String filter, int maxItemLimit) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected String[] doGetUserListOfRole(String roleName) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public String[] getProfileNames(String s) throws UserStoreException {
-        return new String[0];
-    }
-
-    @Override
-    public String getUserClaimValue(String s, String s1, String s2) throws UserStoreException {
-        return "";
-    }
-
-    @Override
-    public Map<String, String> getUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
-        return Map.of();
-    }
-
-    @Override
-    public Claim[] getUserClaimValues(String s, String s1) throws UserStoreException {
-        return new Claim[0];
-    }
-
-    @Override
-    public String[] getAllProfileNames() throws UserStoreException {
-        return new String[0];
-    }
-
-    public boolean isAdmin(String username) throws UserStoreException {
-        return userMap.get(username).isAdmin();
-    }
-
-    /**
      * Checks if the text is protected and returns decrypted text if protected, else returns the plain text
      *
      * @param text text to be resolved
@@ -228,153 +142,151 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
         return text;
     }
 
+    /**
+     * Method to retrieve FileBasedUserStoreManager
+     *
+     * @return FileBasedUserStoreManager
+     */
+    public static FileBasedUserStoreManager getUserStoreManager() {
+        return userStoreManager;
+    }
+
     @Override
-    public boolean isReadOnly() {
+    public boolean authenticate(final String userName, final Object credential) {
+        if (userName == null || credential == null) {
+            return false;
+        }
+        return doAuthenticate(userName, credential);
+    }
+
+    @Override
+    protected boolean doAuthenticate(String userName, Object credential) {
+
+        UserInfo userInfo = userMap.get(userName);
+        if (userInfo != null) {
+            return new String(userInfo.getPassword()).equals(credential);
+        }
         return false;
     }
 
     @Override
-    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1) throws UserStoreException {
-        throw new UnsupportedOperationException();
+    protected String[] doListUsers(String filter, int maxItemLimit) {
+        return userMap.keySet().toArray(new String[0]);
     }
 
     @Override
-    public void addUser(String s, Object o, String[] roles, Map<String, String> map, String s1, boolean b) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected boolean doCheckExistingUser(String userName) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected void doAddUser(String userName, Object credential, String[] roleList, Map<String, String> claims, String profileName, boolean requirePasswordChange) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected boolean doCheckExistingRole(String roleName) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected void doDeleteUser(String userName) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected void doUpdateCredentialByAdmin(String userName, Object newCredential) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected void doUpdateCredential(String userName, Object newCredential, Object oldCredential) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-
-    @Override
-    public void addRole(String s, String[] strings, Permission[] permissions, boolean b) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected void doAddRole(String roleName, String[] userList) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void addRole(String s, String[] strings, Permission[] permissions) throws UserStoreException {
-        throw new UnsupportedOperationException();
-
-    }
-
-    @Override
-    public void updateUserListOfRole(String s, String[] strings, String[] strings1) throws UserStoreException {
-        throw new UnsupportedOperationException();
-
-    }
-
-    @Override
-    protected void doUpdateRoleListOfUser(String userName, String[] deletedRoles, String[] newRoles) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean doCheckIsUserInRole(String userName, String roleName) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected void doDeleteRole(String roleName) throws UserStoreException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void setUserClaimValue(String s, String s1, String s2, String s3) throws UserStoreException {
-        throw new UnsupportedOperationException();
-
-    }
-
-    @Override
-    public void setUserClaimValues(String s, Map<String, String> map, String s1) throws UserStoreException {
-        throw new UnsupportedOperationException();
-
-    }
-
-    @Override
-    public void deleteUserClaimValue(String s, String s1, String s2) throws UserStoreException {
-        throw new UnsupportedOperationException();
-
-    }
-
-    @Override
-    public void deleteUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
-        throw new UnsupportedOperationException();
-
-    }
-
-
-    @Override
-    public String[] getAllSecondaryRoles() throws UserStoreException {
+    protected String[] doGetExternalRoleListOfUser(String s, String s1) {
         return new String[0];
     }
 
     @Override
-    public Date getPasswordExpirationTime(String s) throws UserStoreException {
-        return null;
+    protected String[] doGetUserListOfRole(String roleName) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public int getUserId(String s) throws UserStoreException {
-        return 0;
+    public void addUser(String s, Object o, String[] roles, Map<String, String> map, String s1, boolean b) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public int getTenantId(String s) throws UserStoreException {
-        return 0;
+    protected boolean doCheckExistingUser(String userName) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public int getTenantId() {
-        return 0;
-    }
-
-
-    @Override
-    public Map<String, String> getProperties(Tenant tenant) throws UserStoreException {
-        return Map.of();
+    protected void doAddUser(String userName, Object credential, String[] roleList, Map<String, String> claims, String profileName, boolean requirePasswordChange) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public void updateRoleName(String s, String s1) throws UserStoreException {
+    protected void doDeleteUser(String userName) {
+        throw new UnsupportedOperationException();
+    }
 
+    @Override
+    protected void doUpdateRoleListOfUser(String userName, String[] deletedRoles, String[] newRoles) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void doDeleteRole(String roleName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void doUpdateCredentialByAdmin(String userName, Object newCredential) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void doUpdateCredential(String userName, Object newCredential, Object oldCredential) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected String[] doGetRoleNames(String filter, int maxItemLimit) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected boolean doCheckExistingRole(String roleName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected RoleContext createRoleContext(String roleName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected void doAddRole(String roleName, String[] userList) {
+
+    }
+
+    @Override
+    public boolean doCheckIsUserInRole(String userName, String roleName) {
+        return false;
+    }
+
+    @Override
+    public boolean isExistingRole(String s, boolean b) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void addRole(String s, String[] strings, Permission[] permissions) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Map<String, String> getProperties(org.wso2.micro.integrator.security.user.api.Tenant tenant) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean isMultipleProfilesAllowed() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void addRememberMe(String s, String s1) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isValidRememberMeToken(String s, String s1) {
         return false;
+    }
+
+    @Override
+    public ClaimManager getClaimManager() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isSCIMEnabled() {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -383,58 +295,129 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public boolean isBulkImportSupported() throws UserStoreException {
-        return false;
+    public String[] getProfileNames(String s) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public String[] getUserList(String s, String s1, String s2) throws UserStoreException {
-        return new String[0];
+    public String getUserClaimValue(String s, String s1, String s2) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Map<String, String> getUserClaimValues(String s, String[] strings, String s1) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Claim[] getUserClaimValues(String s, String s1) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String[] getAllProfileNames() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isReadOnly() {
+        return true;
+    }
+
+    @Override
+    public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void updateUserListOfRole(String s, String[] strings, String[] strings1) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setUserClaimValue(String s, String s1, String s2, String s3) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setUserClaimValues(String s, Map<String, String> map, String s1) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void deleteUserClaimValue(String s, String s1, String s2) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void deleteUserClaimValues(String s, String[] strings, String s1) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String[] getAllSecondaryRoles() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Date getPasswordExpirationTime(String s) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int getUserId(String s) throws UserStoreException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int getTenantId(String s) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int getTenantId() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Map<String, String> getProperties(Tenant tenant) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void updateRoleName(String s, String s1) {
+        throw new UnsupportedOperationException();
+
+    }
+
+    @Override
+    public boolean isBulkImportSupported() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String[] getUserList(String s, String s1, String s2) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public UserStoreManager getSecondaryUserStoreManager() {
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void setSecondaryUserStoreManager(UserStoreManager userStoreManager) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public UserStoreManager getSecondaryUserStoreManager(String s) {
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void addSecondaryUserStoreManager(String s, UserStoreManager userStoreManager) {
-
-    }
-
-    @Override
-    public void addRememberMe(String s, String s1) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
-
-    }
-
-    @Override
-    public boolean isValidRememberMeToken(String s, String s1) throws UserStoreException {
-        return false;
-    }
-
-    @Override
-    public ClaimManager getClaimManager() throws org.wso2.micro.integrator.security.user.api.UserStoreException {
-        return null;
-    }
-
-    @Override
-    public boolean isSCIMEnabled() throws org.wso2.micro.integrator.security.user.api.UserStoreException {
-        return false;
-    }
-
-    @Override
-    public Map<String, String> getProperties(org.wso2.micro.integrator.security.user.api.Tenant tenant) throws UserStoreException {
-        return Map.of();
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -442,8 +425,7 @@ public class FileBasedUserStoreManager extends AbstractUserStoreManager {
         return this.realmConfig;
     }
 
-    @Override
-    protected String[] doGetExternalRoleListOfUser(String s, String s1) throws UserStoreException {
-        return new String[0];
+    public boolean isAdmin(String username) {
+        return userMap.get(username).isAdmin();
     }
 }

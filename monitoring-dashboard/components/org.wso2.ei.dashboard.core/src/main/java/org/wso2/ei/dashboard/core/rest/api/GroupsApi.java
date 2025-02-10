@@ -256,7 +256,7 @@ public class GroupsApi {
         try {
             // TODO: sabthar, we also need to audit performed by for deleteUser for MI too not just for ICP
             ack = isIcpManagment(groupId) ? usersDelegate.deleteUserIcp(userId, performedBy) :
-                    usersDelegate.deleteUser(groupId,userId,domain);
+                    usersDelegate.deleteUser(groupId, userId, domain);
             Response.ResponseBuilder responseBuilder = Response.ok().entity(ack);
             HttpUtils.setHeaders(responseBuilder);
             return responseBuilder.build();
@@ -1099,6 +1099,11 @@ public class GroupsApi {
         try {
             RolesResourceResponse roleList = isIcpManagment(groupId) ? rolesDelegate.getAllRolesIcp() : rolesDelegate.getAllRoles(groupId);
             responseBuilder = Response.ok().entity(roleList);
+        } catch (DashboardUserStoreException e) {
+            Error error = new Error();
+            error.setCode(Integer.parseInt(e.getErrorCode()));
+            error.setMessage(e.getMessage());
+            responseBuilder = Response.status(Integer.parseInt(e.getErrorCode())).entity(error);
         } catch (UserStoreException e) {
             return handleUserStoreException(e);
         } catch (ManagementApiException e) {
@@ -1134,6 +1139,11 @@ public class GroupsApi {
                     rolesDelegate.fetchPaginatedRolesResponseIcp(searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate)
                     : rolesDelegate.fetchPaginatedRolesResponse(groupId, searchKey, lowerLimit, upperLimit, order, orderBy, isUpdate);
             responseBuilder = Response.ok().entity(roleList);
+        } catch (DashboardUserStoreException e) {
+            Error error = new Error();
+            error.setCode(Integer.parseInt(e.getErrorCode()));
+            error.setMessage(e.getMessage());
+            responseBuilder = Response.status(Integer.parseInt(e.getErrorCode())).entity(error);
         } catch (UserStoreException e) {
             return handleUserStoreException(e);
         } catch (ManagementApiException e) {
