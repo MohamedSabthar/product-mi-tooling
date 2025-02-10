@@ -28,6 +28,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.wso2.config.mapper.ConfigParser;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.ei.dashboard.core.commons.Constants;
 import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
@@ -108,7 +109,8 @@ import javax.validation.Valid;
 
 @javax.annotation.Generated(value = "io.swagger.codegen.v3.generators.java.JavaJAXRSSpecServerCodegen", date = "2020-12-15T14:16:00.637+05:30[Asia/Colombo]")
 public class GroupsApi {
-
+    private static final String ICP_DEFAULT_NAME = "icp";
+    private static final String ICP_SERVER_NAME_CONFIG = "server_config.name";
     private static final Log logger = LogFactory.getLog(GroupsApi.class);
 
     @POST
@@ -177,7 +179,8 @@ public class GroupsApi {
     }
 
     private static boolean isIcpManagment(String groupId) {
-        return "icp".equals(groupId);
+        String getIcpServerName = (String) ConfigParser.getParsedConfigs().getOrDefault(ICP_SERVER_NAME_CONFIG, ICP_DEFAULT_NAME);
+        return getIcpServerName.equals(groupId);
     }
 
     private static Response handleUserStoreException(UserStoreException exception) {
