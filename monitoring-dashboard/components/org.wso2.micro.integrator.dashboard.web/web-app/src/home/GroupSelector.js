@@ -41,7 +41,8 @@ export default function GroupSelector() {
           (group) => group.label !== ICP_NAME
         );
         return location.pathname.startsWith("/users") ||
-          location.pathname.startsWith("/roles")
+          location.pathname.startsWith("/roles") ||
+          location.pathname.startsWith("/update-password")
           ? [...filteredGroups, { label: ICP_NAME, value: ICP_NAME }]
           : filteredGroups;
       });
@@ -74,7 +75,8 @@ function SelectComponent(props) {
         options.length > 0 &&
         !(
           location.pathname.startsWith("/users") ||
-          location.pathname.startsWith("/roles")
+          location.pathname.startsWith("/roles") ||
+          location.pathname.startsWith("/update-password")
         )
       ) {
         setselectedGroupId(options[0].value);

@@ -26,7 +26,6 @@ import org.wso2.dashboard.security.user.core.DatabaseUtil;
 import org.wso2.dashboard.security.user.core.UserStoreConstants;
 import org.wso2.dashboard.security.user.core.common.AbstractUserStoreManager;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
-import org.wso2.dashboard.security.user.core.common.RoleBreakdown;
 import org.wso2.dashboard.security.user.core.common.Secret;
 import org.wso2.dashboard.security.user.core.common.UnsupportedSecretTypeException;
 import org.wso2.micro.core.util.DatabaseCreator;
@@ -40,9 +39,7 @@ import org.wso2.micro.integrator.security.user.core.UserStoreManager;
 import org.wso2.micro.integrator.security.user.core.claim.Claim;
 import org.wso2.micro.integrator.security.user.core.common.RoleContext;
 import org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants;
-import org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants;
 import org.wso2.micro.integrator.security.user.core.jdbc.JDBCRoleContext;
-import org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants;
 import org.wso2.micro.integrator.security.user.core.ldap.LDAPConstants;
 import org.wso2.micro.integrator.security.user.core.tenant.Tenant;
 import org.wso2.micro.integrator.security.user.core.util.JDBCRealmUtil;
@@ -61,7 +58,6 @@ import java.sql.SQLTimeoutException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
@@ -72,18 +68,21 @@ import java.util.UUID;
 
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.READ_GROUPS_ENABLED;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.WRITE_GROUPS_ENABLED;
+import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.*;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.DIGEST_FUNCTION;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.GET_IS_USER_ROLE_EXIST;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.GET_USER_FILTER;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.GET_USER_ROLE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.SELECT_USER;
 import static org.wso2.micro.integrator.security.user.core.jdbc.JDBCRealmConstants.STORE_SALTED_PASSWORDS;
+import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.*;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.GET_IS_USER_ROLE_EXIST_CASE_INSENSITIVE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.GET_USER_FILTER_CASE_INSENSITIVE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.GET_USER_ROLE_CASE_INSENSITIVE;
 import static org.wso2.micro.integrator.security.user.core.jdbc.caseinsensitive.JDBCCaseInsensitiveConstants.SELECT_USER_CASE_INSENSITIVE;
 
 public class JDBCUserStoreManager extends AbstractUserStoreManager {
+    public static final String EMPTY_STRING = "";
     private static final Log log = LogFactory.getLog(JDBCUserStoreManager.class);
     private static final String CASE_INSENSITIVE_USERNAME = "CaseInsensitiveUsername";
     private static final String SHA_1_PRNG = "SHA1PRNG";
@@ -244,8 +243,9 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         }
     }
 
-    private PreparedStatement createSelectUserPreparedStatement(@NotNull Connection connection, String username) throws SQLException {
-        String sqlStatement = realmConfig.getUserStoreProperty(isCaseSensitiveUsername() ? SELECT_USER : SELECT_USER_CASE_INSENSITIVE);
+    private PreparedStatement createSelectUserPreparedStatement(@NotNull Connection connection, String username)
+            throws SQLException, UserStoreException {
+        String sqlStatement = getSqlStatement(SELECT_USER, SELECT_USER_CASE_INSENSITIVE, "select user");
         logDebug(sqlStatement);
 
         PreparedStatement statement = connection.prepareStatement(sqlStatement);
@@ -254,6 +254,17 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
             statement.setInt(2, tenantId);
         }
         return statement;
+    }
+
+    private String getSqlStatement(String caseSensitiveRealmProperty, String caseInsensitiveRealmProperty,
+                                   String operation) throws UserStoreException {
+        String query = isCaseSensitiveUsername() ?
+                realmConfig.getUserStoreProperty(caseSensitiveRealmProperty) :
+                realmConfig.getUserStoreProperty(caseInsensitiveRealmProperty);
+        if (query == null) {
+            throw new UserStoreException("The SQL statement for " + operation + " is null");
+        }
+        return query;
     }
 
     private boolean isCaseSensitiveUsername() {
@@ -314,10 +325,10 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
             throw new UserStoreException("Database connection is null");
         }
 
-        String sqlStmt = realmConfig.getUserStoreProperty(isCaseSensitiveUsername() ? GET_USER_FILTER : GET_USER_FILTER_CASE_INSENSITIVE);
-        PreparedStatement statement = connection.prepareStatement(sqlStmt);
+        String sqlQuery = getSqlStatement(GET_USER_FILTER, GET_USER_FILTER_CASE_INSENSITIVE, "select user with filter");
+        PreparedStatement statement = connection.prepareStatement(sqlQuery);
         statement.setString(1, filter);
-        if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+        if (sqlQuery.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
             statement.setInt(2, tenantId);
         }
         statement.setMaxRows(maxItemLimit);
@@ -357,59 +368,15 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    protected String[] doGetExternalRoleListOfUser(String userName, String filter) throws UserStoreException {
-        logDebug("Getting roles of user: " + userName + " with filter: " + filter);
-        String sqlStmt;
-        String[] names;
-        if (filter.equals("*") || StringUtils.isEmpty(filter)) {
-            sqlStmt = getExternalRoleListSqlStatement(
-                    realmConfig.getUserStoreProperty(GET_USER_ROLE),
-                    realmConfig.getUserStoreProperty(GET_USER_ROLE_CASE_INSENSITIVE));
-            if (sqlStmt.contains(UserStoreConstants.UM_TENANT_COLUMN)) {
-                names = getStringValuesFromDatabase(sqlStmt, userName, tenantId, tenantId, tenantId);
-            } else {
-                names = getStringValuesFromDatabase(sqlStmt, userName);
-            }
-        } else {
-            filter = filter.trim();
-            filter = filter.replace("*", "%");
-            filter = filter.replace("?", "_");
-            sqlStmt = getExternalRoleListSqlStatement(
-                    realmConfig.getUserStoreProperty(GET_IS_USER_ROLE_EXIST), realmConfig
-                            .getUserStoreProperty(
-                                    GET_IS_USER_ROLE_EXIST_CASE_INSENSITIVE));
-
-            if (sqlStmt.contains(UserStoreConstants.UM_TENANT_COLUMN)) {
-                names = getStringValuesFromDatabase(sqlStmt, userName, tenantId, tenantId, tenantId, filter);
-            } else {
-                names = getStringValuesFromDatabase(sqlStmt, userName, filter);
-            }
-        }
-        List<String> roles = new ArrayList<>();
-
+    protected String[] doGetExternalRoleListOfUser(String username, String filter) throws UserStoreException {
+        logDebug("Getting roles of user: " + username + " with filter: " + filter);
+        boolean isWildcardFilter = StringUtils.isEmpty(filter) || "*".equals(filter);
+        String[] names = isWildcardFilter ? executeRoleQuery(username)
+                : executeRoleQueryWithFilter(username, filter);
         if (names == null) {
-            names = new String[0];
-            logDebug("No external role found for the user: " + userName);
+            logDebug("No external role found for the user: " + username);
         }
-
-
-        Collections.addAll(roles, names);
-        return roles.toArray(new String[0]);
-    }
-
-    private String getExternalRoleListSqlStatement(String caseSensitiveUsernameQuery,
-                                                   String nonCaseSensitiveUsernameQuery)
-            throws UserStoreException {
-        String sqlStmt;
-        if (isCaseSensitiveUsername()) {
-            sqlStmt = caseSensitiveUsernameQuery;
-        } else {
-            sqlStmt = nonCaseSensitiveUsernameQuery;
-        }
-        if (sqlStmt == null) {
-            throw new DashboardUserStoreException("The sql statement for retrieving user roles is null");
-        }
-        return sqlStmt;
+        return names != null ? names : new String[0];
     }
 
     @Override
@@ -419,47 +386,28 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
     }
 
     public String[] getUserListOfJDBCRole(RoleContext ctx) throws UserStoreException {
-
         String roleName = ctx.getRoleName();
-        String[] names = null;
-        String sqlStmt;
-        if (!ctx.isShared()) {
-            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_USERS_IN_ROLE);
-            if (sqlStmt == null) {
-                throw new UserStoreException("The sql statement for retrieving user roles is null");
-            }
-            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                names =
-                        getStringValuesFromDatabase(sqlStmt, roleName, tenantId, tenantId, tenantId);
-            } else {
-                names = getStringValuesFromDatabase(sqlStmt, roleName);
-            }
-        } else if (ctx.isShared()) {
-            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_USERS_IN_SHARED_ROLE);
-            names = getStringValuesFromDatabase(sqlStmt, roleName);
+        String sqlQuery = realmConfig.getUserStoreProperty(GET_USERS_IN_ROLE);
+        if (sqlQuery == null) {
+            throw new UserStoreException("The sql statement for retrieving user roles is null");
         }
+        String[] userNames = sqlQuery.contains(UserCoreConstants.UM_TENANT_COLUMN) ?
+                getStringValuesFromDatabase(sqlQuery, roleName, tenantId, tenantId, tenantId) :
+                getStringValuesFromDatabase(sqlQuery, roleName);
 
-        List<String> userList = new ArrayList<>();
-
-        if (names != null) {
-            Collections.addAll(userList, names);
-            names = userList.toArray(new String[0]);
+        if (userNames == null || userNames.length == 0) {
+            logDebug("Roles are not defined for the role name: " + roleName);
+            return new String[0];
         }
-        log.debug("Roles are not defined for the role name " + roleName);
-
-        return names;
+        return userNames;
     }
 
-    private String[] getStringValuesFromDatabase(String sqlStmt, Object... params) throws UserStoreException {
-        logDebug("Executing Query: " + sqlStmt);
-        for (Object param : params) {
-            logDebug("Input value: " + param);
-        }
-        String[] values;
+    private String[] getStringValuesFromDatabase(String sqlQuery, Object... params) throws UserStoreException {
+        logDebug("Executing Query: " + sqlQuery);
         Connection connection = null;
         try {
             connection = getDBConnection();
-            values = DatabaseUtil.getStringValuesFromDatabase(connection, sqlStmt, params);
+            return DatabaseUtil.getStringValuesFromDatabase(connection, sqlQuery, params);
         } catch (SQLException e) {
             String message = "Error occurred while retrieving string values.";
             logDebug(message, e);
@@ -467,277 +415,100 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         } finally {
             DatabaseUtil.closeConnection(connection);
         }
-        return values;
     }
 
     @Override
-    public boolean doCheckExistingUser(String userName) throws UserStoreException {
-
-        String sqlStmt;
-        if (isCaseSensitiveUsername()) {
-            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_IS_USER_EXISTING);
-        } else {
-            sqlStmt = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.GET_IS_USER_EXISTING_CASE_INSENSITIVE);
+    public boolean doCheckExistingUser(String username) throws UserStoreException {
+        String sqlQuery = getSqlStatement(GET_IS_USER_EXISTING, GET_IS_USER_EXISTING_CASE_INSENSITIVE, "check existing user");
+        boolean isUnique = Boolean.parseBoolean(realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_USERNAME_UNIQUE));
+        if (isUnique) {
+            logDebug("The username should be unique across tenants.");
+            return checkUsernameUniqueness(username);
         }
-        if (sqlStmt == null) {
-            throw new UserStoreException("The sql statement for is user existing null");
-        }
-        boolean isExisting;
-
-        String isUnique = realmConfig
-                .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_USERNAME_UNIQUE);
-        if (Boolean.parseBoolean(isUnique) && !UserCoreConstants.REGISTRY_ANONNYMOUS_USERNAME.equals(userName)) {
-            String uniquenessSql;
-            if (isCaseSensitiveUsername()) {
-                uniquenessSql = realmConfig.getUserStoreProperty(JDBCRealmConstants.USER_NAME_UNIQUE);
-            } else {
-                uniquenessSql = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.USER_NAME_UNIQUE_CASE_INSENSITIVE);
-            }
-            isExisting = isValueExisting(uniquenessSql, userName);
-            if (log.isDebugEnabled()) {
-                log.debug("The username should be unique across tenants.");
-            }
-        } else {
-            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                isExisting = isValueExisting(sqlStmt, userName, tenantId);
-            } else {
-                isExisting = isValueExisting(sqlStmt, userName);
-            }
-        }
-
-        return isExisting;
+        return checkUserExistence(sqlQuery, username);
     }
 
     @Override
-    public void doAddUser(String userName, Object credential, String[] roleList,
+    public void doAddUser(String username, Object credential, String[] roleList,
                           Map<String, String> claims, String profileName, boolean requirePasswordChange)
             throws UserStoreException {
-
-        String userID = UUID.randomUUID().toString();
-
-        // persist the user info. in the database.
-        persistUser(userID, userName, credential, roleList, claims, profileName, requirePasswordChange);
-
+        String userId = UUID.randomUUID().toString();
+        persistUser(userId, username, credential, roleList, claims, profileName, requirePasswordChange);
     }
 
     @Override
-    public void doDeleteUser(String userName) throws UserStoreException {
-        String sqlStmt1;
-        if (isCaseSensitiveUsername()) {
-            sqlStmt1 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ON_DELETE_USER_REMOVE_USER_ROLE);
-        } else {
-            sqlStmt1 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
-                    .ON_DELETE_USER_REMOVE_USER_ROLE_CASE_INSENSITIVE);
-        }
-        if (sqlStmt1 == null) {
-            throw new UserStoreException("The sql statement for delete user-role mapping is null");
-        }
-
-        String sqlStmt2;
-        if (isCaseSensitiveUsername()) {
-            sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ON_DELETE_USER_REMOVE_ATTRIBUTE);
-        } else {
-            sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
-                    .ON_DELETE_USER_REMOVE_ATTRIBUTE_CASE_INSENSITIVE);
-        }
-        if (sqlStmt2 == null) {
-            throw new UserStoreException("The sql statement for delete user attribute is null");
-        }
-
-        String sqlStmt3;
-        if (isCaseSensitiveUsername()) {
-            sqlStmt3 = realmConfig.getUserStoreProperty(JDBCRealmConstants.DELETE_USER);
-        } else {
-            sqlStmt3 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.DELETE_USER_CASE_INSENSITIVE);
-        }
-        if (sqlStmt3 == null) {
-            throw new UserStoreException("The sql statement for delete user is null");
-        }
+    public void doDeleteUser(String username) throws UserStoreException {
+        String sqlDeleteUserRole = getSqlStatement(ON_DELETE_USER_REMOVE_USER_ROLE,
+                ON_DELETE_USER_REMOVE_USER_ROLE_CASE_INSENSITIVE,
+                "delete user-role mapping");
+        String sqlDeleteUserAttribute = getSqlStatement(ON_DELETE_USER_REMOVE_ATTRIBUTE,
+                ON_DELETE_USER_REMOVE_ATTRIBUTE_CASE_INSENSITIVE,
+                "delete user attribute");
+        String sqlDeleteUser = getSqlStatement(DELETE_USER,
+                DELETE_USER_CASE_INSENSITIVE,
+                "delete user");
 
         Connection connection = null;
         try {
             connection = getDBConnection();
-            if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                this.updateStringValuesToDatabase(connection, sqlStmt1, userName, tenantId,
-                        tenantId);
-                this.updateStringValuesToDatabase(connection, sqlStmt2, userName, tenantId,
-                        tenantId);
-                this.updateStringValuesToDatabase(connection, sqlStmt3, userName, tenantId);
+            if (sqlDeleteUserRole.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                updateStringValuesToDatabase(connection, sqlDeleteUserRole, username, tenantId, tenantId);
+                updateStringValuesToDatabase(connection, sqlDeleteUserAttribute, username, tenantId, tenantId);
+                updateStringValuesToDatabase(connection, sqlDeleteUser, username, tenantId);
             } else {
-                this.updateStringValuesToDatabase(connection, sqlStmt1, userName);
-                this.updateStringValuesToDatabase(connection, sqlStmt2, userName);
-                this.updateStringValuesToDatabase(connection, sqlStmt3, userName);
+                updateStringValuesToDatabase(connection, sqlDeleteUserRole, username);
+                updateStringValuesToDatabase(connection, sqlDeleteUserAttribute, username);
+                updateStringValuesToDatabase(connection, sqlDeleteUser, username);
             }
             connection.commit();
         } catch (SQLException e) {
-            String msg = "Error occurred while deleting user : " + userName;
-            if (log.isDebugEnabled()) {
-                log.debug(msg, e);
-            }
-            throw new UserStoreException(msg, e);
+            String message = "Error occurred while deleting user : " + username;
+            logDebug(message, e);
+            throw new UserStoreException(message, e);
         } finally {
-            DatabaseUtil.closeAllConnections(connection);
+            DatabaseUtil.closeConnection(connection);
         }
     }
 
     @Override
-    public void doUpdateRoleListOfUser(String userName, String[] deletedRoles, String[] newRoles)
+    public void doUpdateRoleListOfUser(String username, String[] rolesToRemove, String[] rolesToAdd)
             throws UserStoreException {
-
         Connection connection = null;
         try {
             connection = getDBConnection();
-            String type = DatabaseCreator.getDatabaseType(connection);
-            String sqlStmt2;
-            if (deletedRoles != null && deletedRoles.length > 0) {
-                // Break the provided role list based on whether roles are shared or not
-                RoleBreakdown breakdown = getSharedRoleBreakdown(deletedRoles);
-                String[] roles = breakdown.getRoles();
-                // Integer[] tenantIds = breakdown.getTenantIds();
-
-                String sqlStmt1;
-
-                if (roles.length > 0) {
-                    if (isCaseSensitiveUsername()) {
-                        sqlStmt1 = realmConfig.getUserStoreProperty(JDBCRealmConstants.REMOVE_ROLE_FROM_USER);
-                    } else {
-                        sqlStmt1 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
-                                .REMOVE_ROLE_FROM_USER_CASE_INSENSITIVE);
-                    }
-                    if (sqlStmt1 == null) {
-                        throw new UserStoreException(
-                                "The sql statement for remove user from role is null");
-                    }
-                    if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                        DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt1,
-                                roles, tenantId, userName,
-                                tenantId, tenantId);
-                    } else {
-                        DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt1, roles, userName);
-                    }
-                }
-            }
-
-            if (newRoles != null && newRoles.length > 0) {
-
-                ArrayList<String> newRoleList = new ArrayList<>();
-                for (String role : newRoles) {
-                    if (!isExistingRole(role)) {
-                        String errorMessage = "The role: " + role + " does not exist.";
-                        throw new UserStoreException(errorMessage);
-                    }
-                    if (!isUserInRole(userName, role)) {
-                        newRoleList.add(role);
-                    }
-                }
-
-                String[] rolesToAdd = newRoleList.toArray(new String[0]);
-                // if username and role names are prefixed with domain name,
-                // remove the domain name
-                RoleBreakdown breakdown = getSharedRoleBreakdown(rolesToAdd);
-
-                String[] roles = breakdown.getRoles();
-
-                // Integer[] tenantIds = breakdown.getTenantIds();
-
-                if (roles.length > 0) {
-
-                    if (isCaseSensitiveUsername()) {
-                        realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_ROLE_TO_USER + "-" + type);
-                    } else {
-                        realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.ADD_ROLE_TO_USER_CASE_INSENSITIVE + "-" +
-                                type);
-                    }
-                    if (isCaseSensitiveUsername()) {
-                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_ROLE_TO_USER);
-                    } else {
-                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
-                                .ADD_ROLE_TO_USER_CASE_INSENSITIVE);
-                    }
-                    if (sqlStmt2 == null) {
-                        throw new UserStoreException(
-                                "The sql statement for add user to role is null");
-                    }
-                    if (sqlStmt2.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                        if (UserCoreConstants.OPENEDGE_TYPE.equals(type)) {
-                            DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt2,
-                                    tenantId, roles,
-                                    tenantId, userName,
-                                    tenantId);
-                        } else {
-                            DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt2,
-                                    roles, tenantId,
-                                    userName, tenantId,
-                                    tenantId);
-                        }
-                    } else {
-                        DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt2, newRoles, userName);
-                    }
-                }
-            }
+            removeRolesFromUser(getDBConnection(), username, rolesToRemove);
+            addRolesToUser(connection, username, rolesToAdd);
             connection.commit();
         } catch (SQLException e) {
-            String msg = "Database error occurred while updating role list of user : " + userName;
-            if (log.isDebugEnabled()) {
-                log.debug(msg, e);
-            }
-            throw new UserStoreException(msg, e);
+            String errorMessage = "Database error occurred while updating role list of user : " + username;
+            logDebug(errorMessage, e);
+            throw new UserStoreException(errorMessage, e);
         } catch (UserStoreException e) {
-            String errorMessage = "Error occurred while updating role list of user:" + userName;
-            if (log.isDebugEnabled()) {
-                log.debug(errorMessage, e);
-            }
+            String errorMessage = "Error occurred while updating role list of user:" + username;
+            logDebug(errorMessage, e);
             throw new UserStoreException(e.getMessage(), e);
         } catch (Exception e) {
             String errorMessage = "Error occurred while getting database type from DB connection";
-            if (log.isDebugEnabled()) {
-                log.debug(errorMessage, e);
-            }
+            logDebug(errorMessage, e);
             throw new UserStoreException(errorMessage, e);
         } finally {
             DatabaseUtil.closeAllConnections(connection);
         }
-
     }
 
-    /**
-     * Break the provided role list based on whether roles are shared or not
-     */
-    // TODO: check whether this function is needed since removed the shared role break down
-    private RoleBreakdown getSharedRoleBreakdown(String[] rolesList) {
-        List<String> roles = new ArrayList<>();
-        List<Integer> tenantIds = new ArrayList<>();
-        for (String role : rolesList) {
-            if (StringUtils.isNotEmpty(role)) {
-                JDBCRoleContext ctx = (JDBCRoleContext) createRoleContext(role);
-                roles.add(ctx.getRoleName());
-                tenantIds.add(ctx.getTenantId());
-            }
-        }
-        RoleBreakdown breakdown = new RoleBreakdown();
-        breakdown.setRoles(roles.toArray(new String[0]));
-        breakdown.setTenantIds(tenantIds.toArray(new Integer[0]));
-        return breakdown;
-    }
-
+    @Override
     public void doDeleteRole(String roleName) throws UserStoreException {
-        String sqlStmt1 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ON_DELETE_ROLE_REMOVE_USER_ROLE);
-        if (sqlStmt1 == null) {
-            throw new UserStoreException("The sql statement for delete user-role mapping is null");
-        }
-        String sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.DELETE_ROLE);
-        if (sqlStmt2 == null) {
-            throw new UserStoreException("The sql statement for delete role is null");
-        }
+        String deleteUserRoleQuery = getSqlStatement(ON_DELETE_ROLE_REMOVE_USER_ROLE);
+        String deleteRoleQuery = getSqlStatement(DELETE_ROLE);
         Connection connection = null;
         try {
             connection = getDBConnection();
-            if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                this.updateStringValuesToDatabase(connection, sqlStmt1, roleName, tenantId, tenantId);
-                this.updateStringValuesToDatabase(connection, sqlStmt2, roleName, tenantId);
+            if (deleteUserRoleQuery.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                updateStringValuesToDatabase(connection, deleteUserRoleQuery, roleName, tenantId, tenantId);
+                updateStringValuesToDatabase(connection, deleteRoleQuery, roleName, tenantId);
             } else {
-                this.updateStringValuesToDatabase(connection, sqlStmt1, roleName);
-                this.updateStringValuesToDatabase(connection, sqlStmt2, roleName);
+                updateStringValuesToDatabase(connection, deleteUserRoleQuery, roleName);
+                updateStringValuesToDatabase(connection, deleteRoleQuery, roleName);
             }
             connection.commit();
         } catch (SQLException e) {
@@ -749,159 +520,113 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         }
     }
 
-    public void doUpdateCredentialByAdmin(String userName, Object newCredential) throws UserStoreException {
-        String sqlStmt;
-        if (isCaseSensitiveUsername()) {
-            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.UPDATE_USER_PASSWORD);
-        } else {
-            sqlStmt = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants.UPDATE_USER_PASSWORD_CASE_INSENSITIVE);
-        }
-        if (sqlStmt == null) {
-            throw new UserStoreException("The sql statement for delete user claim value is null");
-        }
-        String saltValue = null;
-        if ("true".equalsIgnoreCase(realmConfig.getUserStoreProperties().get(
-                JDBCRealmConstants.STORE_SALTED_PASSWORDS))) {
-            saltValue = generateSaltValue();
-        }
+    @Override
+    public void doUpdateCredentialByAdmin(String username, Object newCredential) throws UserStoreException {
+        String sqlQuery = getSqlStatement(UPDATE_USER_PASSWORD, UPDATE_USER_PASSWORD_CASE_INSENSITIVE, "delete user claim");
+        boolean hasTenantColumn = sqlQuery.contains(UserCoreConstants.UM_TENANT_COLUMN);
 
-        String password = this.preparePassword(newCredential, saltValue);
+        String saltValue = shouldStoreSaltedPassword() ? generateSaltValue() : null;
+        String password = preparePassword(newCredential, saltValue);
 
-        if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN) && saltValue == null) {
-            updateStringValuesToDatabase(null, sqlStmt, password, "", false, new Date(), userName,
-                    tenantId);
-        } else if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN) && saltValue != null) {
-            updateStringValuesToDatabase(null, sqlStmt, password, saltValue, false, new Date(),
-                    userName, tenantId);
-        } else if (!sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN) && saltValue == null) {
-            updateStringValuesToDatabase(null, sqlStmt, password, "", false, new Date(), userName);
-        } else {
-            updateStringValuesToDatabase(null, sqlStmt, password, saltValue, false, new Date(),
-                    userName);
+        if (hasTenantColumn && saltValue == null) {
+            updateStringValuesToDatabase(null, sqlQuery, password, EMPTY_STRING, false, new Date(), username, tenantId);
+            return;
         }
+        if (hasTenantColumn) {
+            updateStringValuesToDatabase(null, sqlQuery, password, saltValue, false, new Date(), username, tenantId);
+            return;
+        }
+        if (saltValue == null) {
+            updateStringValuesToDatabase(null, sqlQuery, password, EMPTY_STRING, false, new Date(), username);
+            return;
+        }
+        updateStringValuesToDatabase(null, sqlQuery, password, saltValue, false, new Date(), username);
     }
 
-    public void doUpdateCredential(String userName, Object newCredential, Object oldCredential) throws UserStoreException {
-        this.doUpdateCredentialByAdmin(userName, newCredential);
+    private boolean shouldStoreSaltedPassword() {
+        return TRUE_VALUE.equalsIgnoreCase(realmConfig.getUserStoreProperties().get(STORE_SALTED_PASSWORDS));
+    }
+
+    @Override
+    public void doUpdateCredential(String username, Object newCredential, Object oldCredential) throws UserStoreException {
+        doUpdateCredentialByAdmin(username, newCredential);
     }
 
     @Override
     public String[] doGetRoleNames(String filter, int maxItemLimit) throws UserStoreException {
-
-        String[] roles = new String[0];
-        Connection connection = null;
-        String sqlStmt;
-        PreparedStatement statement;
-        statement = null;
-        ResultSet resultSet = null;
-
         if (maxItemLimit == 0) {
-            return roles;
+            return new String[0];
         }
+        List<String> roles = new ArrayList<>();
 
+        Connection connection = null;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
         try {
-
-            if (filter != null && !filter.trim().isEmpty()) {
-                filter = filter.trim();
-                filter = filter.replace("*", "%");
-                filter = filter.replace("?", "_");
-            } else {
-                filter = "%";
-            }
-
-            List<String> lst = new LinkedList<>();
-
             connection = getDBConnection();
-
-            if (connection == null) {
-                throw new UserStoreException("null connection");
+            statement = createGetRoleListPreparedStatement(connection, filter, maxItemLimit);
+            resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                roles.add(resultSet.getString(1));
             }
-
-            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_ROLE_LIST); // TODO
-
-            statement = connection.prepareStatement(sqlStmt);
-            //statement.setString(1, filter);
-            byte count = 0;
-            statement.setString(++count, filter);
-            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                statement.setInt(++count, tenantId);
-            }
-            setPSRestrictions(statement, maxItemLimit);
-            try {
-                resultSet = statement.executeQuery();
-            } catch (SQLException e) {
-                if (e instanceof SQLTimeoutException) {
-                    log.error("The cause might be a time out. Hence ignored", e);
-                } else {
-                    String errorMessage =
-                            "Error while fetching roles from JDBC user store according to filter : " + filter +
-                                    " & max item limit : " + maxItemLimit;
-                    if (log.isDebugEnabled()) {
-                        log.debug(errorMessage, e);
-                    }
-                    throw new UserStoreException(errorMessage, e);
-                }
-            }
-
-            //Expected columns UM_ROLE_NAME, UM_TENANT_ID, UM_SHARED_ROLE
-            if (resultSet != null) {
-                while (resultSet.next()) {
-                    String name = resultSet.getString(1);
-                    lst.add(name);
-                }
-            }
-            if (!lst.isEmpty()) {
-                roles = lst.toArray(new String[0]);
-            }
-
+        } catch (SQLTimeoutException e) {
+            log.error("The cause might be a time out. Hence ignored", e);
         } catch (SQLException e) {
-            String msg = "Error occurred while retrieving role names for filter : " + filter + " & max item limit : " +
-                    maxItemLimit;
-            if (log.isDebugEnabled()) {
-                log.debug(msg, e);
-            }
-            throw new UserStoreException(msg, e);
+            String errorMessage = "Error occurred while retrieving role names for filter : " + filter
+                    + " & max item limit : " + maxItemLimit;
+            logDebug(errorMessage, e);
+            throw new UserStoreException(errorMessage, e);
         } finally {
             DatabaseUtil.closeAllConnections(connection, resultSet, statement);
         }
-        return roles;
-
+        return roles.toArray(new String[0]);
     }
 
-    private void setPSRestrictions(PreparedStatement ps, int maxItemLimit) throws SQLException {
-
-        int givenMax;
-
-        int searchTime;
-
-        try {
-            givenMax = Integer.parseInt(realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_MAX_ROLE_LIST));
-        } catch (Exception e) {
-            givenMax = UserCoreConstants.MAX_USER_ROLE_LIST;
+    private PreparedStatement createGetRoleListPreparedStatement(@NotNull Connection connection, String filter, int maxItemLimit) throws SQLException, UserStoreException {
+        String sqlQuery = getSqlStatement(GET_ROLE_LIST);
+        PreparedStatement statement = connection.prepareStatement(sqlQuery);
+        byte count = 0;
+        statement.setString(++count, prepareFilter(filter));
+        if (sqlQuery.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+            statement.setInt(++count, tenantId);
         }
+        setPSRestrictions(statement, maxItemLimit);
+        return statement;
+    }
 
+    private void setPSRestrictions(PreparedStatement statement, int maxItemLimit) throws SQLException {
+        int givenMax = getIntProperty(UserCoreConstants.RealmConfig.PROPERTY_MAX_ROLE_LIST, UserCoreConstants.MAX_USER_ROLE_LIST);
+        int searchTime = getIntProperty(UserCoreConstants.RealmConfig.PROPERTY_MAX_SEARCH_TIME, UserCoreConstants.MAX_SEARCH_TIME);
+        maxItemLimit = Math.max(0, Math.min(maxItemLimit, givenMax));
+
+
+        statement.setMaxRows(maxItemLimit);
         try {
-            searchTime =
-                    Integer.parseInt(realmConfig.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_MAX_SEARCH_TIME));
-        } catch (Exception e) {
-            searchTime = UserCoreConstants.MAX_SEARCH_TIME;
-        }
-
-        if (maxItemLimit < 0 || maxItemLimit > givenMax) {
-            maxItemLimit = givenMax;
-        }
-
-        ps.setMaxRows(maxItemLimit);
-        try {
-            ps.setQueryTimeout(searchTime);
+            statement.setQueryTimeout(searchTime);
         } catch (Exception e) {
             // this can be ignored since timeout method is not implemented
-            log.debug(e);
+            logDebug(e.getMessage(), e);
         }
+    }
+
+    private int getIntProperty(String propertyKey, int defaultValue) {
+        try {
+            return Integer.parseInt(realmConfig.getUserStoreProperty(propertyKey));
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private String getSqlStatement(String realmProperty) throws UserStoreException {
+        String query = realmConfig.getUserStoreProperty(realmProperty);
+        if (query == null) {
+            throw new UserStoreException("The sql statement for delete user-role mapping is null");
+        }
+        return query;
     }
 
     public boolean doCheckExistingRole(String roleName) throws UserStoreException {
-        RoleContext roleContext = createRoleContext(roleName);  // TODO if role Name with Shared Role?
+        RoleContext roleContext = createRoleContext(roleName);
         return isExistingJDBCRole(roleContext);
     }
 
@@ -918,28 +643,26 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         Connection connection = null;
         try {
             connection = getDBConnection();
-            String sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_ROLE);
-            if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-                this.updateStringValuesToDatabase(connection, sqlStmt, roleName, tenantId);
+            String sqlQuery = realmConfig.getUserStoreProperty(ADD_ROLE);
+            if (sqlQuery.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                updateStringValuesToDatabase(connection, sqlQuery, roleName, tenantId);
             } else {
-                this.updateStringValuesToDatabase(connection, sqlStmt, roleName);
+                updateStringValuesToDatabase(connection, sqlQuery, roleName);
             }
             if (userList != null) {
                 // add role to user
                 String type = DatabaseCreator.getDatabaseType(connection);
                 String sqlStmt2;
                 if (isCaseSensitiveUsername()) {
-                    sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_TO_ROLE + "-" + type);
+                    sqlStmt2 = realmConfig.getUserStoreProperty(ADD_USER_TO_ROLE + "-" + type);
                 } else {
-                    sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
-                            .ADD_USER_TO_ROLE_CASE_INSENSITIVE + "-" + type);
+                    sqlStmt2 = realmConfig.getUserStoreProperty(ADD_USER_TO_ROLE_CASE_INSENSITIVE + "-" + type);
                 }
                 if (sqlStmt2 == null) {
                     if (isCaseSensitiveUsername()) {
-                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_TO_ROLE);
+                        sqlStmt2 = realmConfig.getUserStoreProperty(ADD_USER_TO_ROLE);
                     } else {
-                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
-                                .ADD_USER_TO_ROLE_CASE_INSENSITIVE);
+                        sqlStmt2 = realmConfig.getUserStoreProperty(ADD_USER_TO_ROLE_CASE_INSENSITIVE);
                     }
                 }
                 if (sqlStmt2.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
@@ -957,11 +680,9 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
             }
             connection.commit();
         } catch (SQLException e) {
-            String msg = "Error occurred while adding role : " + roleName;
-            if (log.isDebugEnabled()) {
-                log.debug(msg, e);
-            }
-            throw new UserStoreException(msg, e);
+            String errorMessage = "Error occurred while adding role : " + roleName;
+            logDebug(errorMessage, e);
+            throw new UserStoreException(errorMessage, e);
         } catch (Exception e) {
             String errorMessage = "Error occurred while getting database type from DB connection";
             if (log.isDebugEnabled()) {
@@ -981,49 +702,35 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
     }
 
     @Override
-    public boolean doCheckIsUserInRole(String userName, String roleName) throws UserStoreException {
-        String[] roles = doGetExternalRoleListOfUser(userName, roleName);
-        if (roles != null) {
-            for (String role : roles) {
-                if (role.equalsIgnoreCase(roleName)) {
-                    return true;
-                }
-            }
+    public boolean doCheckIsUserInRole(String username, String roleName) throws UserStoreException {
+        String[] roles = doGetExternalRoleListOfUser(username, roleName);
+        if (roles == null) {
+            return false;
         }
-
-        return false;
-    }
-
-    @Override
-    public boolean isExistingUser(String s) {
-        return false;
+        return Arrays.stream(roles).anyMatch(role -> role.equalsIgnoreCase(roleName));
     }
 
     protected boolean isExistingJDBCRole(RoleContext context) throws UserStoreException {
-
-        boolean isExisting;
         String roleName = context.getRoleName();
-
-        String sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.GET_IS_ROLE_EXISTING);
-        if (sqlStmt == null) {
-            throw new UserStoreException("The sql statement for is role existing role null");
-        }
-
-        if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
-            isExisting =
-                    isValueExisting(sqlStmt, roleName, ((JDBCRoleContext) context).getTenantId());
-        } else {
-            isExisting = isValueExisting(sqlStmt, roleName);
-        }
-
-        return isExisting;
+        String sqlQuery = getSqlStatement(GET_IS_ROLE_EXISTING);
+        return sqlQuery.contains(UserCoreConstants.UM_TENANT_COLUMN) ? isValueExisting(sqlQuery, roleName, ((JDBCRoleContext) context).getTenantId())
+                : isValueExisting(sqlQuery, roleName);
     }
 
-    /**
-     * This private method returns a saltValue using SecureRandom.
-     *
-     * @return saltValue
-     */
+    protected boolean isValueExisting(String sqlQuery, Object... params) throws UserStoreException {
+        Connection connection = null;
+        try {
+            connection = getDBConnection();
+            return DatabaseUtil.getIntegerValueFromDatabase(connection, sqlQuery, params) > -1;
+        } catch (SQLException e) {
+            String message = "Error occurred while checking existence of values.";
+            logDebug(message, e);
+            throw new UserStoreException(message, e);
+        } finally {
+            DatabaseUtil.closeConnection(connection);
+        }
+    }
+
     private String generateSaltValue() {
         String saltValue;
         try {
@@ -1033,12 +740,14 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
             secureRandom.nextBytes(bytes);
             saltValue = Base64.encode(bytes);
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA1PRNG algorithm could not be found.");
+            String errorMessage = "SHA1PRNG algorithm could not be found.";
+            log.error(errorMessage, e);
+            throw new RuntimeException(errorMessage, e);
         }
         return saltValue;
     }
 
-    private void updateStringValuesToDatabase(Connection connection, String sqlStmt,
+    private void updateStringValuesToDatabase(Connection connection, String sqlQuery,
                                               Object... params) throws UserStoreException {
         PreparedStatement statement = null;
         boolean localConnection = false;
@@ -1047,7 +756,7 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
                 localConnection = true;
                 connection = getDBConnection();
             }
-            statement = connection.prepareStatement(sqlStmt);
+            statement = connection.prepareStatement(sqlQuery);
             if (params != null && params.length > 0) {
                 for (int i = 0; i < params.length; i++) {
                     Object param = params[i];
@@ -1066,52 +775,30 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
             }
             int count = statement.executeUpdate();
 
-            if (log.isDebugEnabled()) {
                 if (count == 0) {
-                    log.debug("No rows were updated");
+                    logDebug("No rows were updated");
                 }
-                log.debug("Executed query is " + sqlStmt + " and number of updated rows :: "
+                logDebug("Executed query is " + sqlQuery + " and number of updated rows :: "
                         + count);
-            }
 
             if (localConnection) {
                 connection.commit();
             }
         } catch (SQLException e) {
-            String msg = "Error occurred while updating string values to database.";
-            if (log.isDebugEnabled()) {
-                log.debug(msg, e);
-            }
+            String errorMessage = "Error occurred while updating string values to database.";
+            logDebug(errorMessage, e);
             if (e instanceof SQLIntegrityConstraintViolationException) {
                 // Duplicate entry
-                throw new UserStoreException(msg, UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DUPLICATE_WHILE_WRITING_TO_DATABASE.getCode(), e);
+                throw new UserStoreException(errorMessage, UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DUPLICATE_WHILE_WRITING_TO_DATABASE.getCode(), e);
             } else {
                 // Other SQL Exception
-                throw new UserStoreException(msg, e);
+                throw new UserStoreException(errorMessage, e);
             }
         } finally {
             if (localConnection) {
                 DatabaseUtil.closeAllConnections(connection);
             }
             DatabaseUtil.closeAllConnections(null, statement);
-        }
-    }
-
-    protected boolean isValueExisting(String sqlStmt, Object... params) throws UserStoreException {
-        boolean isExisting = false;
-        Connection connection = null;
-        try {
-            connection = getDBConnection();
-            if (DatabaseUtil.getIntegerValueFromDatabase(connection, sqlStmt, params) > -1) {
-                isExisting = true;
-            }
-            return isExisting;
-        } catch (SQLException e) {
-            String message = "Error occurred while checking existence of values.";
-            logDebug(message, e);
-            throw new UserStoreException(message, e);
-        } finally {
-            DatabaseUtil.closeConnection(connection);
         }
     }
 
@@ -1131,29 +818,117 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         return jdbcDataSource;
     }
 
+    private void removeRolesFromUser(@NotNull Connection connection, String username, String[] roles)
+            throws SQLException, UserStoreException {
+        if (roles == null || roles.length == 0) {
+            return;
+        }
+        roles = Arrays.stream(roles).filter(StringUtils::isNotEmpty).toArray(String[]::new);
+        if (roles.length == 0) {
+            return;
+        }
+        String removeUserQuery = getSqlStatement(REMOVE_ROLE_FROM_USER, REMOVE_ROLE_FROM_USER_CASE_INSENSITIVE, "remove user");
+        if (removeUserQuery.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+            DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, removeUserQuery, roles, tenantId, username, tenantId, tenantId);
+        } else {
+            DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, removeUserQuery, roles, username);
+        }
+    }
+
+    private void addRolesToUser(@NotNull Connection connection, String username, String[] rolesToAdd) throws Exception {
+        if (rolesToAdd == null || rolesToAdd.length == 0) {
+            return;
+        }
+        List<String> validNewRoles = filterValidNewRoles(username, rolesToAdd);
+        if (validNewRoles.isEmpty()) {
+            return;
+        }
+        String[] roles = validNewRoles.toArray(new String[0]);
+        String addRoleToUserQuery = getSqlStatement(ADD_ROLE_TO_USER, ADD_ROLE_TO_USER_CASE_INSENSITIVE, "add role to user");
+        String type = DatabaseCreator.getDatabaseType(connection);
+
+        if (!addRoleToUserQuery.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+            DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, addRoleToUserQuery, roles, username);
+            return;
+        }
+        if (UserCoreConstants.OPENEDGE_TYPE.equals(type)) {
+            DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, addRoleToUserQuery,
+                    tenantId, roles, tenantId, username, tenantId);
+            return;
+        }
+        DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, addRoleToUserQuery,
+                roles, tenantId, username, tenantId, tenantId);
+    }
+
+    private List<String> filterValidNewRoles(String username, String[] newRoles) throws UserStoreException {
+        List<String> validRoles = new ArrayList<>();
+        for (String role : newRoles) {
+            if (!StringUtils.isNotEmpty(role)) {
+                continue;
+            }
+            if (!isExistingRole(role)) {
+                throw new UserStoreException("The role: " + role + " does not exist.");
+            }
+            if (!isUserInRole(username, role)) {
+                validRoles.add(role);
+            }
+        }
+        return validRoles;
+    }
+
+    private boolean checkUsernameUniqueness(String username) throws UserStoreException {
+        String uniquenessSql = isCaseSensitiveUsername()
+                ? realmConfig.getUserStoreProperty(USER_NAME_UNIQUE)
+                : realmConfig.getUserStoreProperty(USER_NAME_UNIQUE_CASE_INSENSITIVE);
+        return isValueExisting(uniquenessSql, username);
+    }
+
+    private boolean checkUserExistence(String sqlQuery, String username) throws UserStoreException {
+        return sqlQuery.contains(UserCoreConstants.UM_TENANT_COLUMN)
+                ? isValueExisting(sqlQuery, username, tenantId)
+                : isValueExisting(sqlQuery, username);
+    }
+
+    private String[] executeRoleQuery(String username) throws UserStoreException {
+        String sqlQuery = getSqlStatement(GET_USER_ROLE, GET_USER_ROLE_CASE_INSENSITIVE, "get user roles");
+        if (sqlQuery.contains(UserStoreConstants.UM_TENANT_COLUMN)) {
+            return getStringValuesFromDatabase(sqlQuery, username, tenantId, tenantId, tenantId);
+        }
+        return getStringValuesFromDatabase(sqlQuery, username);
+    }
+
+    private String[] executeRoleQueryWithFilter(String username, String filter) throws UserStoreException {
+        String sqlQuery = getSqlStatement(GET_IS_USER_ROLE_EXIST, GET_IS_USER_ROLE_EXIST_CASE_INSENSITIVE, "user role exisit");
+        filter = prepareFilter(filter);
+        if (sqlQuery.contains(UserStoreConstants.UM_TENANT_COLUMN)) {
+            return getStringValuesFromDatabase(sqlQuery, username, tenantId, tenantId, tenantId, filter);
+        }
+        return getStringValuesFromDatabase(sqlQuery, username, filter);
+    }
+
     @Override
     public String[] getProfileNames(String s) {
-        return new String[0];
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public String getUserClaimValue(String s, String s1, String s2) {
-        return "";
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Map<String, String> getUserClaimValues(String s, String[] strings, String s1) {
-        return Map.of();
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Claim[] getUserClaimValues(String s, String s1) {
-        return new Claim[0];
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public String[] getAllProfileNames() {
-        return new String[0];
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -1163,52 +938,52 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     public void addUser(String s, Object o, String[] strings, Map<String, String> map, String s1) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void updateUserListOfRole(String s, String[] strings, String[] strings1) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void setUserClaimValue(String s, String s1, String s2, String s3) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void setUserClaimValues(String s, Map<String, String> map, String s1) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void deleteUserClaimValue(String s, String s1, String s2) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void deleteUserClaimValues(String s, String[] strings, String s1) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public String[] getAllSecondaryRoles() {
-        return new String[0];
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Date getPasswordExpirationTime(String s) {
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public int getUserId(String s) throws UserStoreException {
-        return 0;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public int getTenantId(String s) {
-        return 0;
+        throw new UnsupportedOperationException();
     }
 
     public int getTenantId() {
@@ -1262,7 +1037,7 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     public boolean isExistingRole(String s, boolean b) {
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -1305,10 +1080,7 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         throw new UnsupportedOperationException();
     }
 
-    /*
-     * This method persists the user information in the database.
-     */
-    protected void persistUser(String userID, String userName, Object credential, String[] roleList,
+    protected void persistUser(String userID, String username, Object credential, String[] roleList,
                                Map<String, String> claims, String profileName, boolean requirePasswordChange)
             throws UserStoreException {
 
@@ -1331,55 +1103,53 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         }
 
         try {
-            String sqlStmt1 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_WITH_ID);
+            String sqlStmt1 = realmConfig.getUserStoreProperty(ADD_USER_WITH_ID);
 
             String saltValue = null;
 
-            if ("true".equalsIgnoreCase(realmConfig.getUserStoreProperties()
-                    .get(JDBCRealmConstants.STORE_SALTED_PASSWORDS))) {
+            if (TRUE_VALUE.equalsIgnoreCase(realmConfig.getUserStoreProperties()
+                    .get(STORE_SALTED_PASSWORDS))) {
                 saltValue = generateSaltValue();
             }
 
-            String password = this.preparePassword(credentialObj, saltValue);
+            String password = preparePassword(credentialObj, saltValue);
 
             // do all 4 possibilities
             if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN) && (saltValue == null)) {
-                this.updateStringValuesToDatabase(connection, sqlStmt1, userID, userName, password, "",
+                updateStringValuesToDatabase(connection, sqlStmt1, userID, username, password, EMPTY_STRING,
                         requirePasswordChange, new Date(), tenantId);
             } else if (sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN) && (saltValue != null)) {
-                this.updateStringValuesToDatabase(connection, sqlStmt1, userID, userName, password,
+                updateStringValuesToDatabase(connection, sqlStmt1, userID, username, password,
                         saltValue, requirePasswordChange, new Date(),
                         tenantId);
             } else if (!sqlStmt1.contains(UserCoreConstants.UM_TENANT_COLUMN) &&
                     (saltValue == null)) {
-                this.updateStringValuesToDatabase(connection, sqlStmt1, userID, userName, password, "",
+                updateStringValuesToDatabase(connection, sqlStmt1, userID, username, password, EMPTY_STRING,
                         requirePasswordChange, new Date());
             } else {
-                this.updateStringValuesToDatabase(connection, sqlStmt1, userID, userName, password, saltValue,
+                updateStringValuesToDatabase(connection, sqlStmt1, userID, username, password, saltValue,
                         requirePasswordChange, new Date());
             }
 
             if (roleList != null && roleList.length > 0) {
 
-                RoleBreakdown breakdown = getSharedRoleBreakdown(roleList);
-                String[] roles = breakdown.getRoles();
+
+                String[] roles = Arrays.stream(roleList).filter(StringUtils::isNotEmpty).toArray(String[]::new);
 
                 String sqlStmt2;
                 String type = DatabaseCreator.getDatabaseType(connection);
                 if (roles.length > 0) {
                     // Adding user to the non-shared roles
                     if (isCaseSensitiveUsername()) {
-                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_ROLE_TO_USER + "-" + type);
+                        sqlStmt2 = realmConfig.getUserStoreProperty(ADD_ROLE_TO_USER + "-" + type);
                     } else {
-                        sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
-                                .ADD_ROLE_TO_USER_CASE_INSENSITIVE + "-" + type);
+                        sqlStmt2 = realmConfig.getUserStoreProperty(ADD_ROLE_TO_USER_CASE_INSENSITIVE + "-" + type);
                     }
                     if (sqlStmt2 == null) {
                         if (isCaseSensitiveUsername()) {
-                            sqlStmt2 = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_ROLE_TO_USER);
+                            sqlStmt2 = realmConfig.getUserStoreProperty(ADD_ROLE_TO_USER);
                         } else {
-                            sqlStmt2 = realmConfig.getUserStoreProperty(JDBCCaseInsensitiveConstants
-                                    .ADD_ROLE_TO_USER_CASE_INSENSITIVE);
+                            sqlStmt2 = realmConfig.getUserStoreProperty(ADD_ROLE_TO_USER_CASE_INSENSITIVE);
                         }
                     }
 
@@ -1387,16 +1157,16 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
                         if (UserCoreConstants.OPENEDGE_TYPE.equals(type)) {
                             DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt2,
                                     tenantId, roles,
-                                    tenantId, userName,
+                                    tenantId, username,
                                     tenantId);
                         } else {
                             DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt2,
                                     roles, tenantId,
-                                    userName, tenantId,
+                                    username, tenantId,
                                     tenantId);
                         }
                     } else {
-                        DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt2, roleList, userName);
+                        DatabaseUtil.udpateUserRoleMappingInBatchMode(connection, sqlStmt2, roleList, username);
                     }
 
                 }
@@ -1408,7 +1178,7 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
                     profileName = UserCoreConstants.DEFAULT_PROFILE;
                 }
 
-                addProperties(connection, userName, claims, profileName);
+                addProperties(connection, username, claims, profileName);
             }
 
             connection.commit();
@@ -1416,11 +1186,11 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
             try {
                 connection.rollback();
             } catch (SQLException e1) {
-                String errorMessage = "Error rollback add user operation for user : " + userName;
+                String errorMessage = "Error rollback add user operation for user : " + username;
                 logDebug(errorMessage, e1);
                 throw new UserStoreException(errorMessage, e1);
             }
-            String errorMessage = "Error while persisting user : " + userName;
+            String errorMessage = "Error while persisting user : " + username;
             logDebug(errorMessage, e);
 
             if (e instanceof UserStoreException && UserCoreErrorConstants.ErrorMessages.ERROR_CODE_DUPLICATE_WHILE_WRITING_TO_DATABASE.getCode().equals((
@@ -1437,22 +1207,22 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
         }
     }
 
-    private void addProperties(@NotNull Connection connection, String userName, Map<String, String> properties,
+    private void addProperties(@NotNull Connection connection, String username, Map<String, String> properties,
                                String profileName) throws UserStoreException {
         String databaseType;
         try {
             databaseType = DatabaseCreator.getDatabaseType(connection);
         } catch (Exception e) {
-            String message = "Error occurred while adding user properties for user : " + userName;
+            String message = "Error occurred while adding user properties for user : " + username;
             logDebug(message, e);
             throw new UserStoreException(message, e);
         }
 
-        String sqlStmt = getAddUserPropertySqlStatement(databaseType);
+        String sqlQuery = getAddUserPropertySqlStatement(databaseType);
         PreparedStatement statement = null;
 
         try {
-            statement = connection.prepareStatement(sqlStmt);
+            statement = connection.prepareStatement(sqlQuery);
 
             Map<String, String> userAttributes = new HashMap<>();
             for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -1464,16 +1234,16 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
             for (Map.Entry<String, String> entry : userAttributes.entrySet()) {
                 String propertyName = entry.getKey();
                 String propertyValue = entry.getValue();
-                if (sqlStmt.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
+                if (sqlQuery.contains(UserCoreConstants.UM_TENANT_COLUMN)) {
                     if (UserCoreConstants.OPENEDGE_TYPE.equals(databaseType)) {
                         batchUpdateStringValuesToDatabase(statement, propertyName, propertyValue, profileName,
-                                tenantId, userName, tenantId);
+                                tenantId, username, tenantId);
                     } else {
-                        batchUpdateStringValuesToDatabase(statement, userName, tenantId, propertyName, propertyValue,
+                        batchUpdateStringValuesToDatabase(statement, username, tenantId, propertyName, propertyValue,
                                 profileName, tenantId);
                     }
                 } else {
-                    batchUpdateStringValuesToDatabase(statement, userName, propertyName, propertyValue, profileName);
+                    batchUpdateStringValuesToDatabase(statement, username, propertyName, propertyValue, profileName);
                 }
             }
 
@@ -1489,7 +1259,7 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
                 if (totalUpdated == 0) {
                     logDebug("No rows were updated");
                 }
-                logDebug("Executed query is " + sqlStmt + " and number of updated rows :: " + totalUpdated);
+                logDebug("Executed query is " + sqlQuery + " and number of updated rows :: " + totalUpdated);
             }
         } catch (SQLException e) {
             String message = "Error occurred while updating string values to database.";
@@ -1501,14 +1271,14 @@ public class JDBCUserStoreManager extends AbstractUserStoreManager {
     }
 
     private String getAddUserPropertySqlStatement(String databaseType) throws UserStoreException {
-        String sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_PROPERTY + "-" + databaseType);
-        if (sqlStmt == null) {
-            sqlStmt = realmConfig.getUserStoreProperty(JDBCRealmConstants.ADD_USER_PROPERTY);
+        String sqlQuery = realmConfig.getUserStoreProperty(ADD_USER_PROPERTY + "-" + databaseType);
+        if (sqlQuery == null) {
+            sqlQuery = realmConfig.getUserStoreProperty(ADD_USER_PROPERTY);
         }
-        if (sqlStmt == null) {
+        if (sqlQuery == null) {
             throw new UserStoreException("The sql statement for add user property sql is null");
         }
-        return sqlStmt;
+        return sqlQuery;
     }
 
     protected String getClaimAttribute(String claimURI) throws UserStoreException {

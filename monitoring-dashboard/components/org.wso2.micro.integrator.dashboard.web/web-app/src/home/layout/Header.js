@@ -127,8 +127,8 @@ function Header(props) {
                   keepMounted
                   open={Boolean(anchorEl)}
                   onClose={handlePopOverClose}>
-                  <MenuItem onClick={handleLogout}>Logout</MenuItem>
                   <MenuItem onClick={()=>{history.push("/update-password"); handlePopOverClose();}}>Change Password</MenuItem>
+                  <MenuItem onClick={handleLogout}>Logout</MenuItem>
                 </Menu>
               </Popover>
             </Grid>

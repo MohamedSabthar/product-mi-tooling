@@ -391,7 +391,7 @@ public class RolesDelegate {
 
     public Ack updateRoleIcp(UpdateRoleRequest request) throws UserStoreException {
         UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
-        if (userStoreManager.isExistingUser(request.getUserId())) {
+        if (!userStoreManager.isExistingUser(request.getUserId())) {
             throw new UserStoreException("The user : " + request.getUserId() + " does not exists");
         }
         userStoreManager.updateRoleListOfUser(request.getUserId() ,request.getRemovedRoles().toArray(new String[0]) ,request.getAddedRoles().toArray(new String[0]));
