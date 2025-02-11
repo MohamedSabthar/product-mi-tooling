@@ -162,8 +162,8 @@ class IcpRolesDelegate extends RolesDelegate {
         return rolesResourceResponse;
     }
 
+    @Override
     public Ack addRole(AddRoleRequest request) throws UserStoreException {
-//        TODO: sabthar, add debug logs to all ICP
         UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
         if (request.getRoleName() != null) {
             String role = request.getRoleName();
@@ -234,15 +234,12 @@ class IcpRolesDelegate extends RolesDelegate {
                 roleList.add(roleListInner);
             }
         }
-        Comparator<RoleListInner> comparatorObject;
-        //for any other ordering options
-        comparatorObject = Comparator.comparing(RoleListInner::getRoleName);
+        Comparator<RoleListInner> comparatorObject = Comparator.comparing(RoleListInner::getRoleName);
         if (DESCENDING_ORDER.equalsIgnoreCase(order)) {
             roleList.sort(comparatorObject.reversed());
         } else {
             roleList.sort(comparatorObject);
         }
-
         return roleList;
     }
 

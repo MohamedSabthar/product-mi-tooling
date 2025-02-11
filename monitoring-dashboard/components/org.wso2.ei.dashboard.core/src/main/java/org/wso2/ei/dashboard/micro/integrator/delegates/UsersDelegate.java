@@ -25,6 +25,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.wso2.config.mapper.ConfigParser;
 import org.wso2.dashboard.security.user.core.UserStoreManagerUtils;
 import org.wso2.dashboard.security.user.core.common.DashboardUserStoreException;
 import org.wso2.dashboard.security.user.core.common.DataHolder;
@@ -32,7 +33,14 @@ import org.wso2.ei.dashboard.core.commons.utils.HttpUtils;
 import org.wso2.ei.dashboard.core.commons.utils.ManagementApiUtils;
 import org.wso2.ei.dashboard.core.data.manager.DataManagerSingleton;
 import org.wso2.ei.dashboard.core.exception.ManagementApiException;
-import org.wso2.ei.dashboard.core.rest.model.*;
+import org.wso2.ei.dashboard.core.rest.model.Ack;
+import org.wso2.ei.dashboard.core.rest.model.AddUserRequest;
+import org.wso2.ei.dashboard.core.rest.model.NodeList;
+import org.wso2.ei.dashboard.core.rest.model.PasswordRequest;
+import org.wso2.ei.dashboard.core.rest.model.User;
+import org.wso2.ei.dashboard.core.rest.model.Users;
+import org.wso2.ei.dashboard.core.rest.model.UsersInner;
+import org.wso2.ei.dashboard.core.rest.model.UsersResourceResponse;
 import org.wso2.ei.dashboard.micro.integrator.commons.DelegatesUtil;
 import org.wso2.ei.dashboard.micro.integrator.commons.Utils;
 import org.wso2.micro.integrator.security.user.api.RealmConfiguration;
@@ -101,6 +109,7 @@ public abstract class UsersDelegate {
 
 class IcpUsersDelegate extends UsersDelegate {
     private static final Log log = LogFactory.getLog(UsersDelegate.class);
+    private static final String SUPER_ADMIN_USERNAME_PROPERTY = "super_admin.username";
 
     public IcpUsersDelegate(String groupId) {
         super(groupId);
@@ -113,7 +122,7 @@ class IcpUsersDelegate extends UsersDelegate {
                     "Please plug in a user store for the correct functionality", "403");
 
         }
-        DelegatesUtil.logDebugLogs(USERS, null, lowerLimit, upperLimit, order, orderBy, isUpdate);
+        DelegatesUtil.logDebugLogs(USERS, groupId, lowerLimit, upperLimit, order, orderBy, isUpdate);
         String prevSearchKey = getPreviousSearchKey();
         log.debug("prevSearch key :" + prevSearchKey + ", currentSearch key:" + searchKey);
 
@@ -175,32 +184,26 @@ class IcpUsersDelegate extends UsersDelegate {
             String oldPassword = request.getOldPassword();
             if (newPassword.equals(confirmPassword)) {
                 UserStoreManager userStoreManager = UserStoreManagerUtils.getUserStoreManager();
-                try {
-                    synchronized (this) {
-                        String[] userRoles = userStoreManager.getRoleListOfUser(user);
-                        String[] performerRoles = userStoreManager.getRoleListOfUser(performedBy);
-                        if (user.equals(performedBy)) {
-                            if (oldPassword == null) {
-                                throw new UserStoreException("The current user password cannot be null.");
-                            }
-                            userStoreManager.updateCredential(user, newPassword, oldPassword);
-                            // TODO: sabthar, this is wrong, instead of ADMIN need to obtain the value from super_admin.username
-                        } else if (ADMIN.equals(performedBy)) {
-                            userStoreManager.updateCredentialByAdmin(user, newPassword);
-                        } else if (Arrays.asList(performerRoles).contains(ADMIN) &&
-                                !Arrays.asList(userRoles).contains(ADMIN)) {
-                            userStoreManager.updateCredentialByAdmin(user, newPassword);
-                        } else if (Arrays.asList(performerRoles).contains(ADMIN) &&
-                                Arrays.asList(userRoles).contains(ADMIN)) {
-                            throw new UserStoreException(
-                                    "Only a super admin user can update the credentials of another admin.");
-                        } else {
-                            throw new UserStoreException("Only your own credentials can be updated by a user.");
+                String superAdminUserName = (String) ConfigParser.getParsedConfigs().get(SUPER_ADMIN_USERNAME_PROPERTY);
+                synchronized (this) {
+                    String[] userRoles = userStoreManager.getRoleListOfUser(user);
+                    String[] performerRoles = userStoreManager.getRoleListOfUser(performedBy);
+                    if (user.equals(performedBy)) {
+                        if (oldPassword == null) {
+                            throw new UserStoreException("The current user password cannot be null.");
                         }
+                        userStoreManager.updateCredential(user, newPassword, oldPassword);
+                    } else if (superAdminUserName.equals(performedBy)) {
+                        userStoreManager.updateCredentialByAdmin(user, newPassword);
+                    } else if (Arrays.asList(performerRoles).contains(ADMIN) &&
+                            !Arrays.asList(userRoles).contains(ADMIN)) {
+                        userStoreManager.updateCredentialByAdmin(user, newPassword);
+                    } else if (Arrays.asList(performerRoles).contains(ADMIN) &&
+                            Arrays.asList(userRoles).contains(ADMIN)) {
+                        throw new UserStoreException("Only a super admin user can update the credentials of another admin.");
+                    } else {
+                        throw new UserStoreException("Only your own credentials can be updated by a user.");
                     }
-                } catch (UserStoreException e) {
-                    throw new UserStoreException("Failed to update user password. Please check the current " +
-                            "password entered and retry.", e);
                 }
             } else {
                 throw new UserStoreException("New password and re-typed password does not match.");
@@ -470,19 +473,10 @@ class MiUsersDelegate extends UsersDelegate {
         } else {
             url = url.concat(urlEncode(userId));
         }
-        CloseableHttpResponse response = null;
-        try {
-            response = Utils.doPatch(groupId, nodeId, accessToken, url, payload);
-            // TODO: sabthar, this logic seems wrong
+        try (CloseableHttpResponse ignored = Utils.doPatch(groupId, nodeId, accessToken, url, payload)) {
             ack.setStatus(SUCCESS_STATUS);
-        } finally {
-            if (response != null) {
-                try {
-                    response.close();
-                } catch (Exception e) {
-                    log.error("Error closing the http response. ", e);
-                }
-            }
+        } catch (IOException e) {
+            log.error("Error closing the http response. ", e);
         }
         return ack;
     }

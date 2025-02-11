@@ -34,30 +34,8 @@ import org.wso2.ei.dashboard.core.exception.ManagementApiException;
 import org.wso2.ei.dashboard.core.rest.annotation.Secured;
 import org.wso2.ei.dashboard.core.rest.delegates.groups.GroupDelegate;
 import org.wso2.ei.dashboard.core.rest.delegates.nodes.NodesDelegate;
-import org.wso2.ei.dashboard.core.rest.model.Ack;
-import org.wso2.ei.dashboard.core.rest.model.AddRoleRequest;
-import org.wso2.ei.dashboard.core.rest.model.AddUserRequest;
-import org.wso2.ei.dashboard.core.rest.model.ArtifactUpdateRequest;
-import org.wso2.ei.dashboard.core.rest.model.ArtifactsResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.CAppArtifacts;
-import org.wso2.ei.dashboard.core.rest.model.DatasourceList;
 import org.wso2.ei.dashboard.core.rest.model.Error;
-import org.wso2.ei.dashboard.core.rest.model.GroupList;
-import org.wso2.ei.dashboard.core.rest.model.LocalEntryValue;
-import org.wso2.ei.dashboard.core.rest.model.LogConfigAddRequest;
-import org.wso2.ei.dashboard.core.rest.model.LogConfigUpdateRequest;
-import org.wso2.ei.dashboard.core.rest.model.LogConfigsResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.LogsResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.NodeList;
-import org.wso2.ei.dashboard.core.rest.model.NodesResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.PasswordRequest;
-import org.wso2.ei.dashboard.core.rest.model.RegistryArtifacts;
-import org.wso2.ei.dashboard.core.rest.model.RegistryProperty;
-import org.wso2.ei.dashboard.core.rest.model.RegistryResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.RolesResourceResponse;
-import org.wso2.ei.dashboard.core.rest.model.SuccessStatus;
-import org.wso2.ei.dashboard.core.rest.model.UpdateRoleRequest;
-import org.wso2.ei.dashboard.core.rest.model.UsersResourceResponse;
+import org.wso2.ei.dashboard.core.rest.model.*;
 import org.wso2.ei.dashboard.micro.integrator.delegates.ApisDelegate;
 import org.wso2.ei.dashboard.micro.integrator.delegates.CarbonAppsDelegate;
 import org.wso2.ei.dashboard.micro.integrator.delegates.ConnectorsDelegate;
@@ -176,25 +154,44 @@ public class GroupsApi {
 
     private Response handleDashboardUserStoreException(DashboardUserStoreException e) {
         Error error = getError(e);
-        // TODO: check error code here
-        ResponseBuilder responseBuilder = Response.status(Integer.parseInt(e.getErrorCode())).entity(error);
+        int errorCode = getHttpErrorCode(error.getCode(), 400);
+        ResponseBuilder responseBuilder = Response.status(errorCode).entity(error);
         return responseBuilder.build();
+    }
+
+    private static int getHttpErrorCode(int code, int defaultCode) {
+        return isHttpErrorCode(code) ? code : defaultCode;
+    }
+
+    private static boolean isHttpErrorCode(int code) {
+        return (code >= 400 && code < 600);
     }
 
     private static Error getError(DashboardUserStoreException e) {
         Error error = new Error();
-        // TODO: confirm the error code here
-        error.setCode(500);
+        error.setCode(parseIntOrDefault(e.getErrorCode(), 500));
         error.setMessage(e.getMessage());
         return error;
     }
 
+    private static int parseIntOrDefault(String value, int defaultValue) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
     private static Response handleUserStoreException(UserStoreException exception) {
-        // TODO: confirm the error code here
-        ResponseBuilder responseBuilder = Response.status(500);
-//        .entity(getError(exception));
+        ResponseBuilder responseBuilder = Response.status(400).entity(getError(exception));
         HttpUtils.setHeaders(responseBuilder);
         return responseBuilder.build();
+    }
+
+    private static Error getError(UserStoreException exception) {
+        Error error = new Error();
+        error.setMessage(exception.getMessage());
+        return error;
     }
 
     private static Response handleManagementApiException(ManagementApiException exception) {

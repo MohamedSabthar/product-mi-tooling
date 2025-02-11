@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.LEADING_OR_TRAILING_SPACE_ALLOWED_IN_USERNAME;
 import static org.wso2.dashboard.security.user.core.UserStoreConstants.RealmConfig.PROPERTY_JAVA_REG_EX;
 import static org.wso2.micro.integrator.security.user.core.UserCoreConstants.RealmConfig.READ_GROUPS_ENABLED;
+import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.*;
 import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_CANNOT_REMOVE_ADMIN_ROLE_FROM_ADMIN;
 import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ERROR_WHILE_AUTHENTICATION;
 import static org.wso2.micro.integrator.security.user.core.constants.UserCoreErrorConstants.ErrorMessages.ERROR_CODE_ERROR_WHILE_PRE_AUTHENTICATION;
@@ -189,7 +190,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     public void addUser(String username, Object credential, String[] roles, Map<String, String> claims,
                         String profileName, boolean requirePasswordChange) throws UserStoreException {
         if (isReadOnly()) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            throw new UserStoreException(ERROR_CODE_READONLY_USER_STORE.toString());
         }
 
         validateUsername(username);
@@ -212,7 +213,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
 
             doAddUser(username, secret, filteredRoles.toArray(new String[0]), claims, profileName, requirePasswordChange);
         } catch (UnsupportedSecretTypeException e) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString(), e);
+            throw new UserStoreException(ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString(), e);
         }
     }
 
@@ -229,12 +230,12 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                 return;
             }
         } catch (org.wso2.micro.integrator.security.user.api.UserStoreException e) {
-            String errorMessage = String.format(ErrorMessages.ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getMessage(), "persisting user attributes.");
-            String errorCode = ErrorMessages.ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getCode();
+            String errorMessage = String.format(ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getMessage(), "persisting user attributes.");
+            String errorCode = ERROR_CODE_UNABLE_TO_FETCH_CLAIM_MAPPING.getCode();
             throw new UserStoreException(errorCode + " - " + errorMessage, e);
         }
-        String errorMessage = String.format(ErrorMessages.ERROR_CODE_INVALID_CLAIM_URI.getMessage(), claimUri);
-        String errorCode = ErrorMessages.ERROR_CODE_INVALID_CLAIM_URI.getCode();
+        String errorMessage = String.format(ERROR_CODE_INVALID_CLAIM_URI.getMessage(), claimUri);
+        String errorCode = ERROR_CODE_INVALID_CLAIM_URI.getCode();
         throw new UserStoreException(errorCode + " - " + errorMessage);
     }
 
@@ -246,8 +247,8 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
 
     private void validateExistingRole(String role) throws UserStoreException {
         if (!doCheckExistingRole(role)) {
-            String errorMessage = String.format(ErrorMessages.ERROR_CODE_EXTERNAL_ROLE_NOT_EXISTS.getMessage(), role);
-            String errorCode = ErrorMessages.ERROR_CODE_EXTERNAL_ROLE_NOT_EXISTS.getCode();
+            String errorMessage = String.format(ERROR_CODE_EXTERNAL_ROLE_NOT_EXISTS.getMessage(), role);
+            String errorCode = ERROR_CODE_EXTERNAL_ROLE_NOT_EXISTS.getCode();
             throw new UserStoreException(errorCode + " - " + errorMessage);
         }
     }
@@ -255,8 +256,8 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     private void validatePassword(Secret secret) throws UserStoreException {
         if (!isValidPasswordFormat(secret)) {
             String passwordRegex = realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_JAVA_REG_EX);
-            String message = String.format(ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getMessage(), passwordRegex);
-            String errorCode = ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getCode();
+            String message = String.format(ERROR_CODE_INVALID_PASSWORD.getMessage(), passwordRegex);
+            String errorCode = ERROR_CODE_INVALID_PASSWORD.getCode();
             throw new UserStoreException(errorCode + " - " + message);
         }
     }
@@ -291,8 +292,8 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     private void validateUsername(String username) throws UserStoreException {
         if (!isValidUsername(username)) {
             String usernameRegex = getEffectiveUsernameRegex();
-            String errorMessage = String.format(ErrorMessages.ERROR_CODE_INVALID_USER_NAME.getMessage(), null, usernameRegex);
-            String errorCode = ErrorMessages.ERROR_CODE_INVALID_USER_NAME.getCode();
+            String errorMessage = String.format(ERROR_CODE_INVALID_USER_NAME.getMessage(), null, usernameRegex);
+            String errorCode = ERROR_CODE_INVALID_USER_NAME.getCode();
             throw new UserStoreException(errorCode + " - " + errorMessage);
         }
     }
@@ -343,8 +344,8 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
 
     private void validateForExistingUsername(String username) throws UserStoreException {
         if (doCheckExistingUser(username)) {
-            String message = String.format(ErrorMessages.ERROR_CODE_USER_ALREADY_EXISTS.getMessage(), username);
-            String errorCode = ErrorMessages.ERROR_CODE_USER_ALREADY_EXISTS.getCode();
+            String message = String.format(ERROR_CODE_USER_ALREADY_EXISTS.getMessage(), username);
+            String errorCode = ERROR_CODE_USER_ALREADY_EXISTS.getCode();
             throw new UserAlreadyExistsException(errorCode + " - " + message);
         }
     }
@@ -363,21 +364,20 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     protected abstract void doAddUser(String username, Object credential, String[] roleList, Map<String, String> claims,
                                       String profileName, boolean requirePasswordChange) throws UserStoreException;
 
-    public final void updateCredential(String username, Object newCredential, Object oldCredential)
-            throws UserStoreException {
+    public final void updateCredential(String username, Object newCredential, Object oldCredential) throws UserStoreException {
         if (isReadOnly()) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            throw new DashboardUserStoreException(ERROR_CODE_READONLY_USER_STORE.toString(), ERROR_CODE_READONLY_USER_STORE.getCode());
         }
 
         try (Secret newSecret = Secret.getSecret(newCredential); Secret oldSecret = Secret.getSecret(oldCredential)) {
             boolean authenticated = this.doAuthenticate(username, oldSecret);
             if (!authenticated) {
-                throw new UserStoreException(ErrorMessages.ERROR_CODE_OLD_CREDENTIAL_DOES_NOT_MATCH.toString());
+                throw new DashboardUserStoreException(ERROR_CODE_OLD_CREDENTIAL_DOES_NOT_MATCH.getMessage(), ERROR_CODE_OLD_CREDENTIAL_DOES_NOT_MATCH.getCode());
             }
             validateNewCredential(newCredential, false);
             doUpdateCredential(username, newSecret, oldSecret);
         } catch (UnsupportedSecretTypeException e) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString());
+            throw new DashboardUserStoreException(ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString(), ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.getCode());
         }
     }
 
@@ -385,46 +385,46 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         if (!isValidPasswordFormat(credential)) {
             String errorMsg = realmConfig.getUserStoreProperty(PROPERTY_PASSWORD_ERROR_MSG);
             if (errorMsg != null) {
-                ErrorMessages error = byAdmin ? ErrorMessages.ERROR_CODE_ERROR_DURING_PRE_UPDATE_CREDENTIAL_BY_ADMIN
-                        : ErrorMessages.ERROR_CODE_ERROR_DURING_PRE_UPDATE_CREDENTIAL;
+                ErrorMessages error = byAdmin ? ERROR_CODE_ERROR_DURING_PRE_UPDATE_CREDENTIAL_BY_ADMIN
+                        : ERROR_CODE_ERROR_DURING_PRE_UPDATE_CREDENTIAL;
                 String message = String.format(error.getMessage(), errorMsg);
                 throw new UserStoreException(error.getCode() + " - " + message);
             }
-            String errorMessage = String.format(ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getMessage(), realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_JAVA_REG_EX));
-            String errorCode = ErrorMessages.ERROR_CODE_INVALID_PASSWORD.getCode();
+            String errorMessage = String.format(ERROR_CODE_INVALID_PASSWORD.getMessage(), realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_JAVA_REG_EX));
+            String errorCode = ERROR_CODE_INVALID_PASSWORD.getCode();
             throw new UserStoreException(errorCode + " - " + errorMessage);
         }
     }
 
     public final void updateCredentialByAdmin(String username, Object newCredential) throws UserStoreException {
         if (isReadOnly()) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            throw new UserStoreException(ERROR_CODE_READONLY_USER_STORE.toString());
         }
         validateNewCredential(newCredential, true);
         try (Secret secret = Secret.getSecret(newCredential)) {
             if (!doCheckExistingUser(username)) {
-                String errorMessage = String.format(ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getMessage(), username,
+                String errorMessage = String.format(ERROR_CODE_NON_EXISTING_USER.getMessage(), username,
                         realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_DOMAIN_NAME));
-                String errorCode = ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getCode();
+                String errorCode = ERROR_CODE_NON_EXISTING_USER.getCode();
                 throw new UserStoreException(errorCode + "-" + errorMessage);
             }
             doUpdateCredentialByAdmin(username, secret);
         } catch (UnsupportedSecretTypeException e) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString(), e);
+            throw new UserStoreException(ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.toString(), e);
         }
     }
 
     public final void deleteUser(String username) throws UserStoreException {
         if (isReadOnly()) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            throw new UserStoreException(ERROR_CODE_READONLY_USER_STORE.toString());
         }
         if (realmConfig.getAdminUserName().equals(username)) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_DELETE_ADMIN_USER.toString());
+            throw new UserStoreException(ERROR_CODE_DELETE_ADMIN_USER.toString());
         }
         if (!doCheckExistingUser(username)) {
-            String errorMessage = String.format(ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getMessage(), username,
+            String errorMessage = String.format(ERROR_CODE_NON_EXISTING_USER.getMessage(), username,
                     realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_DOMAIN_NAME));
-            String errorCode = ErrorMessages.ERROR_CODE_NON_EXISTING_USER.getCode();
+            String errorCode = ERROR_CODE_NON_EXISTING_USER.getCode();
             throw new UserStoreException(errorCode + " - " + errorMessage);
         }
         doDeleteUser(username);
@@ -446,16 +446,16 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
      */
     public final void deleteRole(String roleName) throws UserStoreException {
         if (isReadOnly()) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            throw new UserStoreException(ERROR_CODE_READONLY_USER_STORE.toString());
         }
         if (realmConfig.getAdminRoleName().equalsIgnoreCase(roleName)) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_CANNOT_DELETE_ADMIN_ROLE.toString());
+            throw new UserStoreException(ERROR_CODE_CANNOT_DELETE_ADMIN_ROLE.toString());
         }
         if (!doCheckExistingRole(roleName)) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_CANNOT_DELETE_NON_EXISTING_ROLE.toString());
+            throw new UserStoreException(ERROR_CODE_CANNOT_DELETE_NON_EXISTING_ROLE.toString());
         }
         if (!writeGroupsEnabled) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_WRITE_GROUPS_NOT_ENABLED.toString());
+            throw new UserStoreException(ERROR_CODE_WRITE_GROUPS_NOT_ENABLED.toString());
         }
         doDeleteRole(roleName);
     }
@@ -490,7 +490,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                 doUpdateRoleListOfUser(username, deletedRoles, newRoles);
                 return;
             }
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            throw new UserStoreException(ERROR_CODE_READONLY_USER_STORE.toString());
         }
     }
 
@@ -576,10 +576,10 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     @Override
     public void addRole(String roleName, String[] userList, Permission[] permissions, boolean isSharedRole) throws UserStoreException {
         if (isReadOnly()) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_READONLY_USER_STORE.toString());
+            throw new UserStoreException(ERROR_CODE_READONLY_USER_STORE.toString());
         }
         if (StringUtils.isEmpty(roleName)) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_CANNOT_ADD_EMPTY_ROLE.toString());
+            throw new UserStoreException(ERROR_CODE_CANNOT_ADD_EMPTY_ROLE.toString());
         }
         if (userList == null) {
             userList = new String[0];
@@ -587,15 +587,15 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
         validateRoleName(roleName);
         validateExistingRoleName(roleName);
         if (!writeGroupsEnabled) {
-            throw new UserStoreException(ErrorMessages.ERROR_CODE_WRITE_GROUPS_NOT_ENABLED.toString());
+            throw new UserStoreException(ERROR_CODE_WRITE_GROUPS_NOT_ENABLED.toString());
         }
         doAddRole(roleName, userList);
     }
 
     private void validateExistingRoleName(String roleName) throws UserStoreException {
         if (doCheckExistingRole(roleName)) {
-            String errorCode = ErrorMessages.ERROR_CODE_ROLE_ALREADY_EXISTS.getCode();
-            String errorMessage = String.format(ErrorMessages.ERROR_CODE_ROLE_ALREADY_EXISTS.getMessage(), roleName);
+            String errorCode = ERROR_CODE_ROLE_ALREADY_EXISTS.getCode();
+            String errorMessage = String.format(ERROR_CODE_ROLE_ALREADY_EXISTS.getMessage(), roleName);
             throw new UserStoreException(errorCode + " - " + errorMessage);
         }
     }
@@ -603,8 +603,8 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     private void validateRoleName(String roleName) throws UserStoreException {
         if (!isRoleNameValid(roleName)) {
             String regEx = realmConfig.getUserStoreProperty(RealmConfig.PROPERTY_ROLE_NAME_JAVA_REG_EX);
-            String errorMessage = String.format(ErrorMessages.ERROR_CODE_INVALID_ROLE_NAME.getMessage(), roleName, regEx);
-            String errorCode = ErrorMessages.ERROR_CODE_INVALID_ROLE_NAME.getCode();
+            String errorMessage = String.format(ERROR_CODE_INVALID_ROLE_NAME.getMessage(), roleName, regEx);
+            String errorCode = ERROR_CODE_INVALID_ROLE_NAME.getCode();
             throw new UserStoreException(errorCode + " - " + errorMessage);
         }
     }
