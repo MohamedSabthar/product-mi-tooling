@@ -71,7 +71,7 @@ function Header(props) {
   };
 
   const showNodeSelector = () => {
-    return !(location.pathname.startsWith("/log-configs") || location.pathname.startsWith("/users") || location.pathname.startsWith("/roles") || location.pathname === "/");
+    return !(location.pathname.startsWith("/log-configs") || location.pathname.startsWith("/update-password") || location.pathname.startsWith("/users") || location.pathname.startsWith("/roles") || location.pathname === "/");
   };
 
   const handleLogout = () => {
@@ -103,7 +103,7 @@ function Header(props) {
                 </IconButton>
               </Grid>
             </Hidden>
-            <GroupSelector />
+            {!location.pathname.startsWith("/update-password") && <GroupSelector />}
             {showNodeSelector() && <NodeFilter /> }
             {!showNodeSelector() && <div style={{height:"74px"}}></div> }
             <Grid item xs />

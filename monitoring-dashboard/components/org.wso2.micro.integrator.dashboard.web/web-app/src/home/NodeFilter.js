@@ -48,7 +48,6 @@ export default function NodeFilter () {
 
     return (
         <div>
-            {nodes.length == 0 ? null : 
             <FormControl className={classes.formControl}>
                 <Select
                     classes={{root: classes.selectRoot}}
@@ -77,7 +76,6 @@ export default function NodeFilter () {
                 </Select>
                 <FormHelperText>Node IDs</FormHelperText>
             </FormControl>
-            }
         </div>
     );
 }
