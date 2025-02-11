@@ -94,9 +94,9 @@ public abstract class UsersDelegate {
 
     public abstract Ack addUser(AddUserRequest request) throws ManagementApiException, UserStoreException;
 
-    public abstract Ack updateUserPassword(PasswordRequest request, String accessToken) throws ManagementApiException, UserStoreException;
+    public abstract Ack updateUserPassword(PasswordRequest request, String accessToken, String performedBy) throws ManagementApiException, UserStoreException;
 
-    public abstract Ack deleteUser(String userId, String domain) throws ManagementApiException, UserStoreException;
+    public abstract Ack deleteUser(String userId, String domain, String performedBy) throws ManagementApiException, UserStoreException;
 }
 
 class IcpUsersDelegate extends UsersDelegate {
@@ -155,7 +155,7 @@ class IcpUsersDelegate extends UsersDelegate {
     }
 
     @Override
-    public Ack updateUserPassword(PasswordRequest request, String performedBy) throws UserStoreException {
+    public Ack updateUserPassword(PasswordRequest request, String accessToken, String performedBy) throws UserStoreException {
         if (UserStoreManagerUtils.isFileBasedUserStoreEnabled()) {
             throw new DashboardUserStoreException("Unable update password with the file-based user store. " +
                     "Please plug in a user store for the correct functionality", "403");
@@ -212,9 +212,9 @@ class IcpUsersDelegate extends UsersDelegate {
     }
 
     @Override
-    public Ack deleteUser(String userId, String performedBy) throws UserStoreException {
+    public Ack deleteUser(String userId, String domain, String performedBy) throws UserStoreException {
         if (log.isDebugEnabled()) {
-            log.debug("Request received to delete the user: " + userId);
+            log.debug("Request received to delete the user: " + userId + "by user: " + performedBy);
         }
         if (Objects.isNull(performedBy)) {
             log.warn("Deleting a user without authenticating/authorizing the request sender. Adding "
@@ -453,7 +453,7 @@ class MiUsersDelegate extends UsersDelegate {
     }
 
     @Override
-    public Ack updateUserPassword(PasswordRequest request, String accessToken)
+    public Ack updateUserPassword(PasswordRequest request, String accessToken, String performedBy)
             throws ManagementApiException {
         Ack ack = new Ack(FAIL_STATUS);
         JsonObject payload = createUserUpdatePasswordPayload(request);
@@ -496,7 +496,7 @@ class MiUsersDelegate extends UsersDelegate {
     }
 
     @Override
-    public Ack deleteUser(String userId, String domain) throws ManagementApiException {
+    public Ack deleteUser(String userId, String domain, String performedBy) throws ManagementApiException {
         if (StringUtils.isEmpty(domain)) {
             log.debug("Deleting user " + userId + " in group " + groupId);
         } else {
