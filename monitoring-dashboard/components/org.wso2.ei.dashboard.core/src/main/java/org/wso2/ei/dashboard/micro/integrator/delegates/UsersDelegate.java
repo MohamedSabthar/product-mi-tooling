@@ -192,6 +192,9 @@ class IcpUsersDelegate extends UsersDelegate {
                         if (oldPassword == null) {
                             throw new UserStoreException("The current user password cannot be null.");
                         }
+                        if (user.equals(superAdminUserName)) {
+                            throw new UserStoreException("Super admin is not allowed to update credentials.");
+                        }
                         userStoreManager.updateCredential(user, newPassword, oldPassword);
                     } else if (superAdminUserName.equals(performedBy)) {
                         userStoreManager.updateCredentialByAdmin(user, newPassword);

@@ -79,12 +79,11 @@ function SelectComponent(props) {
           location.pathname.startsWith("/update-password")
         )
       ) {
-        setselectedGroupId(options[0].value);
         changeSelectedGroupId(options[0].value);
       } else if (globalGroupId === "" && options.length !== 0) {
         changeSelectedGroupId(options[0].value);
       }
-    }, [props.groupList]);
+    }, [options]);
 
     const changeSelectedGroupId = (groupId) => {
       if (groupId === ICP_NAME) {
