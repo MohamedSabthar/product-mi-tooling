@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class DelegatesUtil {
     private static final DataManager DATA_MANAGER = DataManagerSingleton.getDataManager();
-    private static final String ICP_DEFAULT_NAME = "icp";
+    private static final String ICP_DEFAULT_NAME = "Integration Control Plane";
     private static final String ICP_SERVER_NAME_CONFIG = "server_config.name";
     private static final Logger logger = LogManager.getLogger(DelegatesUtil.class);
 

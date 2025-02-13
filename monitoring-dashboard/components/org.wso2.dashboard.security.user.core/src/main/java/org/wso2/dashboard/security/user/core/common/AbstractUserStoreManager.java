@@ -565,9 +565,6 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
     protected abstract boolean doCheckExistingUser(String username) throws UserStoreException;
 
     private void handlePrivilegedActionException(PrivilegedActionException exception) throws UserStoreException {
-        if (exception.getCause() instanceof DashboardUserStoreException) {
-            throw (DashboardUserStoreException) exception.getCause();
-        }
         throw new UserStoreException(ERROR_CODE_ERROR_WHILE_AUTHENTICATION.getMessage(), exception.getCause());
     }
 
