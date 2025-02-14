@@ -83,6 +83,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                 return true;
             }
         } catch (UnsupportedSecretTypeException e) {
+            log.error("Error occurred while authenticating user: " + username, e);
             throw new DashboardUserStoreException(ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.getMessage(),
                     ERROR_CODE_UNSUPPORTED_CREDENTIAL_TYPE.getCode(), e);
         } catch (Exception e) {
