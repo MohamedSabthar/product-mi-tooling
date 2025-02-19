@@ -92,8 +92,7 @@ public abstract class AbstractUserStoreManager implements UserStoreManager {
                     ERROR_CODE_ERROR_WHILE_AUTHENTICATION.getCode(), e);
         }
         logDebug("Authentication failure. Wrong username or password is provided.");
-        throw new DashboardUserStoreException(ERROR_CODE_ERROR_WHILE_AUTHENTICATION.getMessage(),
-                ERROR_CODE_ERROR_WHILE_AUTHENTICATION.getCode());
+        return false;
     }
 
     /**
