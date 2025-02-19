@@ -60,6 +60,7 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1116,7 +1117,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     public Map<String, String> getUserClaimValues(String s, String[] strings, String s1) throws UserStoreException {
-        return Map.of();
+        return new HashMap<>();
     }
 
     @Override
@@ -1195,7 +1196,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     public Map<String, String> getProperties(Tenant tenant) throws UserStoreException {
-        return Map.of();
+        return new HashMap<>();
     }
 
     @Override
@@ -1252,7 +1253,7 @@ public class ReadOnlyLDAPUserStoreManager extends AbstractUserStoreManager {
 
     @Override
     public Map<String, String> getProperties(org.wso2.micro.integrator.security.user.api.Tenant tenant) throws org.wso2.micro.integrator.security.user.api.UserStoreException {
-        return Map.of();
+        return new HashMap<>();
     }
 
     @Override
